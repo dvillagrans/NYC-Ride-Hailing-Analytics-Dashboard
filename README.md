@@ -4,6 +4,11 @@
 
 Un dashboard completo desarrollado en Streamlit que permite analizar patrones de viajes, ingresos, distribución geográfica y tendencias temporales de los servicios de ride-hailing en NYC. Incluye modelos de Machine Learning para predicción de tarifas y clasificación de viajes.
 
+<div align="center">
+  <img src="NYC Ride-Hailing Analytics Dashboard.png" alt="NYC Ride-Hailing Analytics Dashboard" width="800">
+  <p><em>Vista principal del dashboard con métricas de viajes e insights en tiempo real</em></p>
+</div>
+
 ![Dashboard Preview](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Pandas](https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white)

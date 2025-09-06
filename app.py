@@ -11,78 +11,427 @@ from streamlit_folium import folium_static
 import pydeck as pdk
 from datetime import datetime
 import lightgbm as lgb
+import warnings
 
-st.set_page_config(page_title="🚖 NYC Dashboard", layout="wide")
-st.title("📊 Dashboard de Viajes Uber/Lyft (NYC)")
-st.markdown("Análisis mensual basado en muestra del 5% por operador.")
+# Configuración para eliminar warnings
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+pd.options.mode.chained_assignment = None
+
+# Configuración de página con tema profesional
+st.set_page_config(
+    page_title="🚖 NYC Ride-Hailing Analytics",
+    page_icon="🚖",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': "NYC Ride-Hailing Analytics Dashboard - Professional Data Analysis Tool"
+    }
+)
+
+# 🎨 CSS Personalizado con Paleta de Colores Profesional
+st.markdown("""
+<style>
+    /* Paleta de Colores Definida */
+    :root {
+        --bg-primary: #1E1E2F;
+        --text-primary: #FFFFFF;
+        --text-secondary: #B0B0C3;
+        --accent-blue: #4F9DFF;
+        --accent-green: #4CAF50;
+        --accent-red: #E53935;
+        --card-bg: #2A2A3E;
+        --border-color: #3A3A4E;
+    }
+    
+    /* Fondo Principal */
+    .stApp {
+        background-color: var(--bg-primary) !important;
+        color: var(--text-primary) !important;
+    }
+    
+    .main {
+        padding-top: 2rem;
+        background-color: var(--bg-primary) !important;
+    }
+    
+    /* Sidebar Oscuro */
+    .css-1d391kg {
+        background-color: var(--card-bg) !important;
+        border-right: 1px solid var(--border-color) !important;
+    }
+    
+    /* Textos del Sidebar */
+    .css-1d391kg .stMarkdown, 
+    .css-1d391kg .stSelectbox label,
+    .css-1d391kg .stMultiSelect label,
+    .css-1d391kg .stSlider label,
+    .css-1d391kg .stCheckbox label {
+        color: var(--text-primary) !important;
+    }
+    
+    /* Header personalizado */
+    .header-container {
+        background: linear-gradient(135deg, var(--accent-blue), #6B73FF);
+        padding: 2rem 1rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 8px 32px rgba(79, 157, 255, 0.3);
+        text-align: center;
+    }
+    
+    .header-title {
+        color: white;
+        font-size: 3rem;
+        font-weight: 700;
+        margin: 0;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    .header-subtitle {
+        color: rgba(255,255,255,0.9);
+        font-size: 1.2rem;
+        margin-top: 0.5rem;
+    }
+    
+    /* Métricas Unificadas - Estilo Base Consistente */
+    .metric-container {
+        background: linear-gradient(135deg, var(--card-bg) 0%, rgba(42, 42, 62, 0.8) 100%);
+        padding: 1.8rem;
+        border-radius: 15px;
+        border: 2px solid var(--border-color);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+        margin: 0.8rem 0;
+        transition: all 0.3s ease;
+        min-height: 130px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .metric-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--accent-blue), #6B73FF);
+        transition: all 0.3s ease;
+    }
+    
+    .metric-container:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        border-color: var(--accent-blue);
+    }
+    
+    /* Métricas de Ingresos - Verde */
+    .metric-income::before {
+        background: linear-gradient(90deg, var(--accent-green), #66BB6A) !important;
+    }
+    
+    .metric-income:hover {
+        border-color: var(--accent-green) !important;
+        box-shadow: 0 10px 30px rgba(76, 175, 80, 0.3) !important;
+    }
+    
+    .metric-income .metric-value {
+        color: var(--accent-green) !important;
+        font-size: 2.2rem;
+        font-weight: 700;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    /* Métricas de Viajes - Azul */
+    .metric-trips .metric-value {
+        color: var(--accent-blue) !important;
+        font-size: 2.2rem;
+        font-weight: 700;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    /* Métricas de Tiempo - Gris */
+    .metric-time::before {
+        background: linear-gradient(90deg, var(--text-secondary), #C0C0D3) !important;
+    }
+    
+    .metric-time:hover {
+        border-color: var(--text-secondary) !important;
+        box-shadow: 0 10px 30px rgba(176, 176, 195, 0.3) !important;
+    }
+    
+    .metric-time .metric-value {
+        color: var(--text-secondary) !important;
+        font-size: 2.2rem;
+        font-weight: 700;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    
+
+    
+    /* Tabs Estilizados */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: var(--card-bg);
+        border-radius: 10px;
+        padding: 0.5rem;
+        margin-bottom: 2rem;
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background-color: transparent;
+        color: var(--text-secondary);
+        border-radius: 8px;
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        height: 50px;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: var(--accent-blue) !important;
+        color: white !important;
+        box-shadow: 0 4px 12px rgba(79, 157, 255, 0.4);
+    }
+    
+    /* Botones */
+    .stButton > button {
+        background: linear-gradient(135deg, var(--accent-blue), #6B73FF);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(79, 157, 255, 0.3);
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(79, 157, 255, 0.4);
+    }
+    
+    /* Selectboxes y Controles */
+    .stSelectbox > div > div {
+        background-color: var(--card-bg) !important;
+        border: 1px solid var(--border-color) !important;
+        color: var(--text-primary) !important;
+    }
+    
+    .stMultiSelect > div > div {
+        background-color: var(--card-bg) !important;
+        border: 1px solid var(--border-color) !important;
+        color: var(--text-primary) !important;
+    }
+    
+    /* Sliders */
+    .stSlider > div > div > div {
+        background-color: var(--accent-blue);
+    }
+    
+    /* DataFrames */
+    .stDataFrame {
+        background-color: var(--card-bg);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+    
+    /* Gráficos */
+    .js-plotly-plot {
+        border-radius: 10px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+    
+    /* Alertas y Mensajes */
+    .stSuccess {
+        background-color: rgba(76, 175, 80, 0.1) !important;
+        border: 1px solid var(--accent-green) !important;
+        color: var(--accent-green) !important;
+        border-radius: 10px;
+    }
+    
+    .stInfo {
+        background-color: rgba(79, 157, 255, 0.1) !important;
+        border: 1px solid var(--accent-blue) !important;
+        color: var(--accent-blue) !important;
+        border-radius: 10px;
+    }
+    
+    .stWarning {
+        background-color: rgba(255, 193, 7, 0.1) !important;
+        border: 1px solid #FFC107 !important;
+        color: #FFC107 !important;
+        border-radius: 10px;
+    }
+    
+    .stError {
+        background-color: rgba(229, 57, 53, 0.1) !important;
+        border: 1px solid var(--accent-red) !important;
+        color: var(--accent-red) !important;
+        border-radius: 10px;
+    }
+    
+    /* Ocultar elementos de Streamlit */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display: none;}
+    
+    /* Loading spinner personalizado */
+    .stSpinner {
+        text-align: center;
+    }
+    
+    /* Animaciones suaves */
+    * {
+        transition: all 0.3s ease;
+    }
+    
+    /* Textos principales */
+    .stMarkdown, .stText, p, h1, h2, h3, h4, h5, h6 {
+        color: var(--text-primary) !important;
+    }
+    
+    /* Textos secundarios */
+    .stCaption {
+        color: var(--text-secondary) !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Header profesional
+st.markdown("""
+<div class="header-container">
+    <h1 class="header-title">🚖 NYC Ride-Hailing Analytics</h1>
+    <p class="header-subtitle">Professional Data Analysis Dashboard | Real-time Insights & Predictive Analytics</p>
+</div>
+""", unsafe_allow_html=True)
 
 DATA_FOLDER = "data_sampled"
 REQUIRED_COLS = ["pickup_datetime", "hvfhs_license_num", "PULocationID", "DOLocationID", "tips", "driver_pay"]
 
-# Cargar zonas y aeropuertos
-try:
-    zones_df = pd.read_csv("data/taxi_zone_lookup.csv")
-    # Aeropuertos: JFK (132), LaGuardia (138), Newark EWR (1)
-    AIRPORT_ZONES = [1, 132, 138]
-    AIRPORT_NAMES = {1: "Newark (EWR)", 132: "JFK", 138: "LaGuardia (LGA)"}
-    
-    # Cargar coordenadas de centroides para zonas
+# Configuración de datos con caching
+@st.cache_data
+def load_zone_data():
+    """Carga datos de zonas con caching para mejor rendimiento"""
     try:
-        centroids_df = pd.read_csv("data/taxi_zone_centroids.csv")
-        # Combinar datos de zonas con coordenadas
-        zones_with_coords = zones_df.merge(centroids_df, on="LocationID", how="left")
-        st.success("✅ Coordenadas de zonas cargadas correctamente")
-    except Exception as e:
-        st.warning(f"⚠️ No se pudieron cargar las coordenadas: {e}")
-        zones_with_coords = zones_df
-except Exception as e:
-    st.warning(f"⚠️ No se pudieron cargar las zonas: {e}")
-    zones_df = None
-    zones_with_coords = None
-    AIRPORT_ZONES = []
-    AIRPORT_NAMES = {}
+        zones_df = pd.read_csv("data/taxi_zone_lookup.csv")
+        # Aeropuertos: JFK (132), LaGuardia (138), Newark EWR (1)
+        airport_zones = [1, 132, 138]
+        airport_names = {1: "Newark (EWR)", 132: "JFK", 138: "LaGuardia (LGA)"}
+        
+        # Cargar coordenadas de centroides para zonas
+        try:
+            centroids_df = pd.read_csv("data/taxi_zone_centroids.csv")
+            # Combinar datos de zonas con coordenadas
+            zones_with_coords = zones_df.merge(centroids_df, on="LocationID", how="left")
+            return zones_df, zones_with_coords, airport_zones, airport_names, True
+        except Exception:
+            return zones_df, zones_df, airport_zones, airport_names, False
+    except Exception:
+        return None, None, [], {}, False
 
-# Cargar lista de archivos disponibles
-files = sorted(glob.glob(f"{DATA_FOLDER}/*_reduced.parquet"))
-months = [os.path.basename(f).replace("_reduced.parquet", "") for f in files]
-file_map = dict(zip(months, files))
+# Cargar datos de zonas
+zones_df, zones_with_coords, AIRPORT_ZONES, AIRPORT_NAMES, coords_loaded = load_zone_data()
 
-# Sidebar - Filtros generales
+# Mostrar estado de carga solo en modo debug
+if st.sidebar.checkbox("🔧 Modo Debug", value=False):
+    if zones_df is not None:
+        if coords_loaded:
+            st.sidebar.success("✅ Datos de zonas y coordenadas cargados")
+        else:
+            st.sidebar.info("ℹ️ Zonas cargadas, coordenadas no disponibles")
+    else:
+        st.sidebar.warning("⚠️ Datos de zonas no disponibles")
+
+# Carga optimizada de archivos con caching
+@st.cache_data
+def get_available_files():
+    """Obtiene lista de archivos disponibles con caching"""
+    files = sorted(glob.glob(f"{DATA_FOLDER}/*_reduced.parquet"))
+    months = [os.path.basename(f).replace("_reduced.parquet", "") for f in files]
+    return dict(zip(months, files)), months
+
+file_map, months = get_available_files()
+
+# Sidebar profesional con filtros
 with st.sidebar:
-    st.header("🔍 Filtros")
-    selected_month = st.selectbox("📅 Mes:", months)
-    st.info("ℹ️ Selecciona un mes para cargar los datos. Algunos análisis podrían requerir cargar datos de varios meses.")
-
-# Cargar datos
-file_path = file_map[selected_month]
-try:
-    df = pd.read_parquet(file_path)
-except Exception as e:
-    st.error(f"❌ Error al leer el archivo: {e}")
-    st.stop()
-
-# Validar columnas
-missing = [col for col in REQUIRED_COLS if col not in df.columns]
-if missing:
-    st.error(f"🚫 Faltan columnas requeridas: {', '.join(missing)}")
-    st.stop()
-
-# Procesar columnas de tiempo
-try:
-    df["pickup_datetime"] = pd.to_datetime(df["pickup_datetime"], errors="coerce")
-    if "pickup_hour" not in df.columns:
-        df["pickup_hour"] = df["pickup_datetime"].dt.hour
-    if "pickup_weekday" not in df.columns:
-        df["pickup_weekday"] = df["pickup_datetime"].dt.weekday
-    if "pickup_month" not in df.columns:
-        df["pickup_month"] = df["pickup_datetime"].dt.month
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, var(--accent-blue), #6B73FF); 
+                padding: 1rem; border-radius: 10px; margin-bottom: 1rem; 
+                box-shadow: 0 4px 12px rgba(79, 157, 255, 0.3);">
+        <h2 style="color: white; margin: 0; text-align: center; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">🔍 Filtros de Análisis</h2>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Añadir nombres de días
-    days_map = {0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"}
-    df["day_name"] = df["pickup_weekday"].map(days_map)
-except Exception as e:
-    st.error(f"❌ Error al procesar columnas de fecha: {e}")
-    st.stop()
+    # Selector de mes con mejor diseño
+    selected_month = st.selectbox(
+        "📅 Período de Análisis:", 
+        months,
+        help="Selecciona el mes para analizar los datos de viajes"
+    )
+    
+    # Información profesional
+    st.markdown("""
+    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; 
+                border-left: 4px solid var(--accent-green); margin: 1rem 0;
+                border: 1px solid var(--border-color);">
+        <small style="color: var(--text-primary);"><strong>📊 Dataset:</strong> Muestra representativa del 5% de viajes por operador</small>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Carga y procesamiento optimizado de datos
+@st.cache_data
+def load_and_process_data(file_path):
+    """Carga y procesa datos con caching para mejor rendimiento"""
+    try:
+        # Cargar datos
+        df = pd.read_parquet(file_path)
+        
+        # Validar columnas requeridas
+        missing = [col for col in REQUIRED_COLS if col not in df.columns]
+        if missing:
+            return None, f"Faltan columnas requeridas: {', '.join(missing)}"
+        
+        # Procesar columnas de tiempo
+        df["pickup_datetime"] = pd.to_datetime(df["pickup_datetime"], errors="coerce")
+        
+        # Crear características temporales si no existen
+        if "pickup_hour" not in df.columns:
+            df["pickup_hour"] = df["pickup_datetime"].dt.hour
+        if "pickup_weekday" not in df.columns:
+            df["pickup_weekday"] = df["pickup_datetime"].dt.weekday
+        if "pickup_month" not in df.columns:
+            df["pickup_month"] = df["pickup_datetime"].dt.month
+        
+        # Añadir nombres de días
+        days_map = {0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves", 
+                   4: "Viernes", 5: "Sábado", 6: "Domingo"}
+        df["day_name"] = df["pickup_weekday"].map(days_map)
+        
+        return df, None
+        
+    except Exception as e:
+        return None, f"Error al cargar datos: {str(e)}"
+
+# Cargar datos del mes seleccionado
+with st.spinner("🔄 Cargando y procesando datos..."):
+    file_path = file_map[selected_month]
+    df, error_msg = load_and_process_data(file_path)
+    
+    if df is None:
+        st.error(f"❌ {error_msg}")
+        st.stop()
+    
+    # Mostrar información del dataset en modo debug
+    if st.sidebar.checkbox("📊 Info Dataset", value=False):
+        st.sidebar.success(f"✅ Dataset cargado: {len(df):,} registros")
+        st.sidebar.info(f"📅 Período: {selected_month}")
 
 # Unir con zonas si existen
 if zones_df is not None:
@@ -116,34 +465,99 @@ else:
     boroughs = []
 
 with st.sidebar:
-    selected_ops = st.multiselect("🏢 Operadores:", operadores, default=list(operadores))
-    selected_hours = st.slider("🕐 Hora de recogida:", 0, 23, (0, 23))
+    # Separador visual
+    st.markdown("---")
     
-    # Filtro por borough (más fácil que muchas zonas)
+    # Filtros de operadores con mejor diseño
+    st.markdown("**🏢 Operadores de Transporte**")
+    selected_ops = st.multiselect(
+        "Selecciona operadores:", 
+        operadores, 
+        default=list(operadores),
+        help="Filtra por empresas de ride-hailing"
+    )
+    
+    # Filtro de horas con mejor diseño
+    st.markdown("**🕐 Rango Horario**")
+    selected_hours = st.slider(
+        "Horas de operación:", 
+        0, 23, (0, 23),
+        help="Selecciona el rango de horas para analizar"
+    )
+    
+    # Filtro por distrito con validación
     if len(boroughs) > 0:
-        selected_boroughs = st.multiselect("📍 Distrito:", boroughs, default=list(boroughs))
-        borough_filter = df["pickup_borough"].isin(selected_boroughs)
+        st.markdown("**📍 Distritos de NYC**")
+        selected_boroughs = st.multiselect(
+            "Selecciona distritos:", 
+            boroughs, 
+            default=list(boroughs),
+            help="Filtra por borough de recogida"
+        )
+        borough_filter = df["pickup_borough"].isin(selected_boroughs) if selected_boroughs else pd.Series([True] * len(df))
     else:
-        borough_filter = True
+        borough_filter = pd.Series([True] * len(df))
     
-    # Filtro de aeropuertos
-    show_airport_only = st.checkbox("✈️ Solo viajes de/hacia aeropuertos", value=False)
-    if show_airport_only:
+    # Filtro de aeropuertos con mejor diseño
+    st.markdown("**✈️ Filtros Especiales**")
+    show_airport_only = st.checkbox(
+        "Solo viajes aeroportuarios", 
+        value=False,
+        help="Mostrar únicamente viajes hacia/desde aeropuertos"
+    )
+    
+    if show_airport_only and "from_airport" in df.columns and "to_airport" in df.columns:
         airport_filter = (df["from_airport"] | df["to_airport"])
     else:
-        airport_filter = True
+        airport_filter = pd.Series([True] * len(df))
+
+# Aplicar filtros de manera optimizada
+@st.cache_data
+def apply_filters(df, selected_ops, selected_hours, borough_filter, airport_filter):
+    """Aplica filtros de manera optimizada con caching"""
+    try:
+        # Crear máscara de filtros
+        mask = (
+            df["hvfhs_license_num"].isin(selected_ops) &
+            df["pickup_hour"].between(selected_hours[0], selected_hours[1]) &
+            borough_filter &
+            airport_filter
+        )
+        return df[mask]
+    except Exception:
+        return df  # Retornar datos sin filtrar en caso de error
 
 # Aplicar filtros
-df_filtered = df[
-    df["hvfhs_license_num"].isin(selected_ops) &
-    df["pickup_hour"].between(*selected_hours) &
-    borough_filter &
-    airport_filter
-]
+df_filtered = apply_filters(df, selected_ops, selected_hours, borough_filter, airport_filter)
 
+# Validación de datos filtrados
 if len(df_filtered) == 0:
-    st.warning("⚠️ No hay datos para los filtros seleccionados.")
+    st.markdown("""
+    <div style="background: #fff3cd; border: 1px solid #ffeaa7; 
+                border-radius: 10px; padding: 1rem; margin: 1rem 0;">
+        <h4 style="color: #856404; margin: 0;">⚠️ Sin Datos Disponibles</h4>
+        <p style="color: #856404; margin: 0.5rem 0 0 0;">No hay datos que coincidan con los filtros seleccionados. 
+        Intenta ampliar los criterios de búsqueda.</p>
+    </div>
+    """, unsafe_allow_html=True)
     st.stop()
+
+# Mostrar estadísticas de filtrado en sidebar
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("**📈 Estadísticas del Filtro**")
+    total_records = len(df)
+    filtered_records = len(df_filtered)
+    filter_percentage = (filtered_records / total_records) * 100 if total_records > 0 else 0
+    
+    st.metric(
+        "Registros mostrados", 
+        f"{filtered_records:,}",
+        f"{filter_percentage:.1f}% del total"
+    )
+    
+    if filtered_records < total_records:
+        st.info(f"🔍 Filtrado: {total_records - filtered_records:,} registros ocultos")
 
 # Tabs principales
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
@@ -160,41 +574,79 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
 with tab1:
     st.subheader("Resumen general")
     
-    # KPIs principales en tarjetas
+    # KPIs principales con colores consistentes
     col1, col2, col3, col4 = st.columns(4)
     total_trips = len(df_filtered)
-    col1.metric("🧾 Viajes", f"{total_trips:,}")
     unique_days = df_filtered["pickup_datetime"].dt.date.nunique()
-    col2.metric("📅 Días únicos", unique_days)
-    col3.metric("🏢 Operadores", df_filtered["hvfhs_license_num"].nunique())
     
-    # Ingresos totales
+    # Métrica de Viajes - Azul
+    col1.markdown(f"""
+    <div class="metric-container metric-trips">
+        <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">🧾 Viajes</div>
+        <div class="metric-value">{total_trips:,}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Métrica de Días - Tiempo (Gris)
+    col2.markdown(f"""
+    <div class="metric-container metric-time">
+        <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">📅 Días únicos</div>
+        <div class="metric-value">{unique_days}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Métrica de Operadores - Azul
+    col3.markdown(f"""
+    <div class="metric-container metric-trips">
+        <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">🏢 Operadores</div>
+        <div class="metric-value">{df_filtered["hvfhs_license_num"].nunique()}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Ingresos totales - Verde
     if "driver_pay" in df_filtered.columns:
         total_pay = df_filtered["driver_pay"].sum()
-        col4.metric("💲 Ingresos Totales", f"${total_pay:,.2f}")
+        col4.markdown(f"""
+        <div class="metric-container metric-income">
+            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">💲 Ingresos Totales</div>
+            <div class="metric-value">${total_pay:,.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Sección de insights destacados
     st.subheader("🔍 Insights principales")
     insight_cols = st.columns(3)
     
-    # 1. Promedio diario de viajes
+    # 1. Promedio diario de viajes - Azul
     avg_daily_trips = total_trips / unique_days if unique_days > 0 else 0
-    insight_cols[0].metric("Promedio diario de viajes", f"{avg_daily_trips:,.0f}")
+    insight_cols[0].markdown(f"""
+    <div class="metric-container metric-trips">
+        <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">📊 Promedio diario de viajes</div>
+        <div class="metric-value">{avg_daily_trips:,.0f}</div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # 2. Distancia y duración promedio (si están disponibles)
+    # 2. Distancia promedio - Tiempo (Gris)
     if "trip_miles" in df_filtered.columns:
         avg_miles = df_filtered["trip_miles"].mean()
-        insight_cols[1].metric("Distancia promedio", f"{avg_miles:.2f} millas")
+        insight_cols[1].markdown(f"""
+        <div class="metric-container metric-time">
+            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">📏 Distancia promedio</div>
+            <div class="metric-value">{avg_miles:.2f} mi</div>
+        </div>
+        """, unsafe_allow_html=True)
     
+    # 3. Duración promedio - Tiempo (Gris)
     if "trip_time" in df_filtered.columns:
         avg_time_min = df_filtered["trip_time"].mean() / 60  # Convertir a minutos
-        insight_cols[2].metric("Duración promedio", f"{avg_time_min:.1f} min")
+        insight_cols[2].markdown(f"""
+        <div class="metric-container metric-time">
+            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">⏱️ Duración promedio</div>
+            <div class="metric-value">{avg_time_min:.1f} min</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Análisis de propinas (si están disponibles)
-    if "tips" in df_filtered.columns and "driver_pay" in df_filtered.columns:
-        total_tips = df_filtered["tips"].sum()
-        tip_percentage = (total_tips / total_pay) * 100 if total_pay > 0 else 0
-        st.info(f"💰 Los pasajeros pagaron ${total_tips:,.2f} en propinas, representando un {tip_percentage:.1f}% del total de ingresos.")
+
     
     # Distribución por hora y día
     col1, col2 = st.columns(2)
@@ -205,7 +657,7 @@ with tab1:
             xaxis_title="Hora del día",
             yaxis_title="Número de viajes"
         )
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, width='stretch')
     
     with col2:
         if "day_name" in df_filtered:
@@ -219,7 +671,7 @@ with tab1:
             xaxis_title="Día de la semana",
             yaxis_title="Número de viajes"
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
     
     # Mapa de calor por hora y día
     st.subheader("🔥 Patrón de viajes por hora y día")
@@ -246,7 +698,7 @@ with tab1:
         title="Mapa de calor: Viajes por hora y día"
     )
     fig_heatmap.update_layout(height=450)
-    st.plotly_chart(fig_heatmap, use_container_width=True)
+    st.plotly_chart(fig_heatmap, width='stretch')
     
     # Gráfico de tendencia temporal (si hay suficientes días)
     if unique_days > 3:
@@ -264,7 +716,7 @@ with tab1:
             title="Evolución diaria del número de viajes",
             labels={"pickup_date": "Fecha", "trips": "Número de viajes", "hvfhs_license_num": "Operador"}
         )
-        st.plotly_chart(fig_trend, use_container_width=True)
+        st.plotly_chart(fig_trend, width='stretch')
     
     # Resumen por operador
     st.subheader("📊 Resumen por operador")
@@ -296,7 +748,7 @@ with tab1:
     if "Duración Promedio (min)" in op_summary.columns:
         op_summary["Duración Promedio (min)"] = op_summary["Duración Promedio (min)"].apply(lambda x: f"{x:.1f}")
     
-    st.dataframe(op_summary, use_container_width=True)
+    st.dataframe(op_summary, width='stretch')
     
     # Distribución geográfica resumida (si hay datos de zonas)
     if "pickup_borough" in df_filtered.columns:
@@ -319,9 +771,9 @@ with tab1:
             labels={"pickup_borough": "Distrito", "trips": "Viajes", "Porcentaje": "% del total"}
         )
         fig_geo.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_geo, use_container_width=True)
+        st.plotly_chart(fig_geo, width='stretch')
     
-    st.dataframe(op_summary, use_container_width=True)
+    st.dataframe(op_summary, width='stretch')
 
 with tab2:
     st.subheader("🕐 Análisis de Horas Pico")
@@ -363,7 +815,7 @@ with tab2:
             labels=dict(x="Operador", y="Hora del día", color=title_prefix)
         )
         fig.update_layout(title=f"Mapa de calor: {title_prefix} por hora y operador")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # Gráfica de línea por hora
         hour_summary = df_filtered.groupby(["pickup_hour", "hvfhs_license_num"]).agg({value_col: agg_func}).reset_index()
@@ -375,7 +827,7 @@ with tab2:
             markers=True,
             title=f"{title_prefix} por hora del día"
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
         
     elif view_by == "Día de la semana":
         # Heatmap de días de la semana por operador
@@ -404,7 +856,7 @@ with tab2:
             labels=dict(x="Operador", y="Día de la semana", color=title_prefix)
         )
         fig.update_layout(title=f"Mapa de calor: {title_prefix} por día de semana y operador")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
     else:  # Por zonas
         if "pickup_zone" in df_filtered.columns:
@@ -428,7 +880,7 @@ with tab2:
                 title=f"Mapa de calor: {title_prefix} por zona y operador (Top 15)",
                 height=800
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             
             # Barras por zona
             zone_totals = zone_data.groupby(["pickup_zone", "hvfhs_license_num"]).agg({value_col: agg_func}).reset_index()
@@ -440,7 +892,7 @@ with tab2:
                 title=f"Top 15 zonas por {title_prefix.lower()}"
             )
             fig2.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width='stretch')
         else:
             st.warning("No hay datos de zonas disponibles para este análisis.")
     
@@ -467,7 +919,7 @@ with tab2:
         labels=dict(x="Día de la semana", y="Hora del día", color=title_prefix)
     )
     fig.update_layout(title=f"Mapa de calor: {title_prefix} por hora y día")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 with tab3:
     st.subheader("🗺️ Visualización Geoespacial")
@@ -483,7 +935,7 @@ with tab3:
             zone_counts = zone_counts.sort_values("trip_count", ascending=False)
             
             # Mostrar tabla de resultados
-            st.dataframe(zone_counts, use_container_width=True)
+            st.dataframe(zone_counts, width='stretch')
             
             # Crear gráfico de barras para top zonas
             top_n = st.slider("Mostrar top N zonas:", 5, 30, 15)
@@ -498,7 +950,7 @@ with tab3:
                 labels={"pickup_zone": "Zona", "trip_count": "Cantidad de Viajes", "pickup_borough": "Distrito"}
             )
             fig.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
               # Crear mapa de burbujas si hay datos de coordenadas disponibles
             try:
                 if zones_with_coords is not None and "Lat" in zones_with_coords.columns and "Lon" in zones_with_coords.columns:
@@ -634,7 +1086,7 @@ with tab3:
         flows = flows.sort_values("trip_count", ascending=False)
         
         # Mostrar top flujos
-        st.dataframe(flows.head(20), use_container_width=True)
+        st.dataframe(flows.head(20), width='stretch')
         
         # Crear gráfico de sankey o red para top flujos
         top_flows = flows.head(15)
@@ -654,7 +1106,7 @@ with tab3:
           ))])
         
         fig.update_layout(title_text="Top 15 Flujos de Viajes entre Zonas", font_size=12)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.warning("No hay suficiente información de zonas para mostrar flujos de viajes.")
         
@@ -698,7 +1150,7 @@ with tab4:
                 font_size=12,
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             
             # Métricas detalladas en Uber vs Lyft
             st.subheader("⚖️ Comparativa de Métricas Principales")
@@ -742,7 +1194,7 @@ with tab4:
             
             # Crear dataframe para visualizar
             metrics_df = pd.DataFrame(metrics_data)
-            st.dataframe(metrics_df, use_container_width=True)
+            st.dataframe(metrics_df, width='stretch')
             
             # Si hay datos de propinas y tarifas, calcular la tasa de propinas
             if "tips" in uber_lyft.columns and "driver_pay" in uber_lyft.columns:
@@ -765,7 +1217,7 @@ with tab4:
                 
                 # Mostrar tabla de análisis de propinas
                 st.dataframe(tip_analysis[["Empresa", "Propina Promedio", "% Viajes con Propina", "% sobre Ingresos"]], 
-                            use_container_width=True)
+                            width='stretch')
                 
                 # Histograma de distribución de propinas
                 uber_lyft_with_tips = uber_lyft[uber_lyft["tips"] > 0].copy()
@@ -786,7 +1238,7 @@ with tab4:
                         color_discrete_map={"Uber": "#276EF1", "Lyft": "#FF00BF"}
                     )
                     fig_hist.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5))
-                    st.plotly_chart(fig_hist, use_container_width=True)
+                    st.plotly_chart(fig_hist, width='stretch')
         
         # --- SEGUNDA COLUMNA: PATRONES DE VIAJE ---
         with col2:
@@ -810,7 +1262,7 @@ with tab4:
                     font_size=12,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             
             # Comparativa por precio/milla y precio/minuto
             if all(col in uber_lyft.columns for col in ["driver_pay", "trip_miles", "trip_time"]):
@@ -835,7 +1287,7 @@ with tab4:
                 efficiency_formatted.columns = ["Empresa", "Precio por Milla", "Precio por Minuto", "Velocidad Promedio"]
                 
                 # Mostrar tabla de eficiencia
-                st.dataframe(efficiency_formatted, use_container_width=True)
+                st.dataframe(efficiency_formatted, width='stretch')
                 
                 # Gráfica comparativa de barras
                 fig_bar = go.Figure()
@@ -859,7 +1311,7 @@ with tab4:
                     uniformtext_minsize=8,
                     uniformtext_mode="hide"
                 )
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.plotly_chart(fig_bar, width='stretch')
     
     # Análisis por zona geográfica
     st.subheader("🌆 Concentración por Zonas")
@@ -891,7 +1343,7 @@ with tab4:
             xaxis_tickangle=-45,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
         )
-        st.plotly_chart(fig_zones, use_container_width=True)
+        st.plotly_chart(fig_zones, width='stretch')
         
         # Calcular dominancia por zona (qué empresa domina en cada zona)
         zone_dominance = zone_distribution.pivot(index="pickup_zone", columns="hvfhs_license_num", values="viajes").fillna(0)
@@ -921,7 +1373,7 @@ with tab4:
                 aspect="auto"
             )
             fig_heatmap.update_layout(height=500)
-            st.plotly_chart(fig_heatmap, use_container_width=True)
+            st.plotly_chart(fig_heatmap, width='stretch')
     else:
         st.warning("No hay datos de zonas disponibles para realizar este análisis.")
      
@@ -948,7 +1400,7 @@ with tab4:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
     )
     
-    st.plotly_chart(fig_hourly, use_container_width=True)
+    st.plotly_chart(fig_hourly, width='stretch')
     
     # Análisis de cuotas de mercado por hora
     hourly_pivot = hourly_trips.pivot_table(index="pickup_hour", columns="hvfhs_license_num", values="viajes").fillna(0)
@@ -992,7 +1444,7 @@ with tab4:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
     )
     
-    st.plotly_chart(fig_share, use_container_width=True)
+    st.plotly_chart(fig_share, width='stretch')
     
     # Comparativa por día de la semana
     st.subheader("📅 Patrones por Día de la Semana")
@@ -1026,7 +1478,7 @@ with tab4:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
     )
     
-    st.plotly_chart(fig_daily, use_container_width=True)
+    st.plotly_chart(fig_daily, width='stretch')
     
     # Si hay datos de aeropuertos, analizar las diferencias en viajes desde/hacia aeropuertos
     if "to_airport" in uber_lyft.columns and "from_airport" in uber_lyft.columns:
@@ -1064,7 +1516,7 @@ with tab4:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
         )
         
-        st.plotly_chart(fig_airport, use_container_width=True)
+        st.plotly_chart(fig_airport, width='stretch')
         
         # Calcular participación de mercado en viajes a/desde aeropuertos
         airport_share = uber_lyft[uber_lyft[airport_col] == 1].groupby("hvfhs_license_num").size().reset_index(name="viajes")
@@ -1088,7 +1540,7 @@ with tab4:
                 pull=[0.03, 0.03]
             )
             
-            st.plotly_chart(fig_airport_share, use_container_width=True)
+            st.plotly_chart(fig_airport_share, width='stretch')
 
 with tab5:
     st.subheader("💰 Análisis de Ingresos e Impuestos")
@@ -1158,7 +1610,7 @@ with tab5:
             title="Distribución de Ingresos y Cargos",
             hole=0.4
         )
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, width='stretch')
         
         # Análisis por empresa
         st.subheader("Análisis por Empresa")
@@ -1174,7 +1626,7 @@ with tab5:
             title="Composición de Ingresos por Empresa",
             labels={"hvfhs_license_num": "Empresa", "value": "Monto ($)", "variable": "Concepto"}
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
         
         # Análisis temporal si hay muchos días
         if df_filtered["pickup_datetime"].dt.date.nunique() > 3:
@@ -1194,7 +1646,7 @@ with tab5:
                 title="Evolución de Ingresos Diarios",
                 labels={"pickup_date": "Fecha", "driver_pay": "Ingresos ($)", "hvfhs_license_num": "Empresa"}
             )
-            st.plotly_chart(fig3, use_container_width=True)
+            st.plotly_chart(fig3, width='stretch')
         
         # Análisis de relación entre variables
         if {"driver_pay", "tips"}.issubset(available_cols):
@@ -1217,7 +1669,7 @@ with tab5:
                 title="Relación entre Tarifa y Propina",
                 labels={"driver_pay": "Tarifa ($)", "tips": "Propina ($)", "hvfhs_license_num": "Empresa"}
             )
-            st.plotly_chart(fig4, use_container_width=True)
+            st.plotly_chart(fig4, width='stretch')
             
             # Distribución del porcentaje de propina
             fig5 = px.histogram(
@@ -1231,7 +1683,7 @@ with tab5:
                 labels={"tip_percent": "Porcentaje de Propina (%)", "hvfhs_license_num": "Empresa"}
             )
             fig5.update_layout(bargap=0.1)
-            st.plotly_chart(fig5, use_container_width=True)
+            st.plotly_chart(fig5, width='stretch')
 
 with tab6:
     st.subheader("♿ Accesibilidad en el Servicio")
@@ -1291,7 +1743,7 @@ with tab6:
                 text=company_airport["porcentaje_airport"].apply(lambda x: f"{x:.1f}%")
             )
             fig1.update_traces(textposition='outside')
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width='stretch')
               # Análisis por hora del día
             if "driver_pay" in df_filtered.columns:
                 st.subheader("Ingresos por Viajes a Aeropuertos por Hora")
@@ -1314,7 +1766,7 @@ with tab6:
                 newnames = {False: "No Aeropuerto", True: "Aeropuerto"}
                 fig2.for_each_trace(lambda t: t.update(name = newnames[bool(int(t.name.split('=')[1]))]) if '=' in t.name and len(t.name.split('=')) > 1 else None)
                 
-                st.plotly_chart(fig2, use_container_width=True)
+                st.plotly_chart(fig2, width='stretch')
             
             # Análisis geográfico
             if "pickup_zone" in df_filtered.columns and zones_with_coords is not None:
@@ -1344,7 +1796,7 @@ with tab6:
                 fig3.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 fig3.update_layout(xaxis_tickangle=-45)
                 
-                st.plotly_chart(fig3, use_container_width=True)
+                st.plotly_chart(fig3, width='stretch')
         else:
             # Si no hay datos de aeropuertos, mostrar un mensaje alternativo
             st.warning("No hay datos de viajes a aeropuertos disponibles para realizar un análisis alternativo de accesibilidad.")
@@ -1370,7 +1822,7 @@ with tab6:
                     title="Histograma de Distancias de Viaje",
                     labels={"trip_miles": "Distancia (millas)", "count": "Número de Viajes", "hvfhs_license_num": "Empresa"}
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
     else:
         # Filtrar solo las columnas relevantes
         accessible_trips = df_filtered[df_filtered["wheelchair_accessible"] == 1]
@@ -1449,7 +1901,7 @@ with tab6:
                 yaxis=dict(range=[0, max(company_pivot["porcentaje_accesible"]) * 1.2])
             )
             
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width='stretch')
         
         # Comparativa gráfica de ingresos
         if "driver_pay" in df_filtered.columns:
@@ -1470,7 +1922,7 @@ with tab6:
             newnames = {0: "No Accesible", 1: "Accesible"}
             fig2.for_each_trace(lambda t: t.update(name = newnames[bool(int(t.name.split('=')[1]))]) if '=' in t.name and len(t.name.split('=')) > 1 else None)
             
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width='stretch')
         
         # Análisis por día de la semana
         if "day_name" in df_filtered.columns:
@@ -1501,7 +1953,7 @@ with tab6:
         if day_col == "day_name":
             fig3.update_layout(xaxis={"categoryorder": "array", "categoryarray": day_order})
             
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig3, width='stretch')
         
         # Mapa de distribución si hay datos de zona
         if "pickup_zone" in df_filtered.columns and zones_with_coords is not None:
@@ -1537,7 +1989,7 @@ with tab6:
             fig4.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig4.update_layout(xaxis_tickangle=-45)
             
-            st.plotly_chart(fig4, use_container_width=True)
+            st.plotly_chart(fig4, width='stretch')
 
 with tab7:
     st.subheader("✈️ Análisis de Viajes a Aeropuertos")
@@ -1625,7 +2077,7 @@ with tab7:
                 )
                 
                 fig1.update_traces(textinfo="percent+label")
-                st.plotly_chart(fig1, use_container_width=True)
+                st.plotly_chart(fig1, width='stretch')
                 
                 # Distribución por hora del día
                 st.subheader("Distribución por Hora del Día")
@@ -1671,7 +2123,7 @@ with tab7:
                 fig2.update_yaxes(title_text="Número de Viajes", secondary_y=False)
                 fig2.update_yaxes(title_text="% del Total de Viajes", secondary_y=True)
                 
-                st.plotly_chart(fig2, use_container_width=True)
+                st.plotly_chart(fig2, width='stretch')
                 
                 # Si hay datos de aeropuertos específicos
                 if "DOLocationID" in df_filtered.columns and AIRPORT_ZONES:
@@ -1699,7 +2151,7 @@ with tab7:
                         )
                         
                         fig3.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig3, use_container_width=True)
+                        st.plotly_chart(fig3, width='stretch')
         
         # TAB 2: VIAJES DESDE AEROPUERTOS
         with airport_tabs[1]:
@@ -1760,7 +2212,7 @@ with tab7:
                 )
                 
                 fig1.update_traces(textinfo="percent+label")
-                st.plotly_chart(fig1, use_container_width=True)
+                st.plotly_chart(fig1, width='stretch')
                 
                 # Distribución por hora del día
                 st.subheader("Distribución por Hora del Día")
@@ -1806,7 +2258,7 @@ with tab7:
                 fig2.update_yaxes(title_text="Número de Viajes", secondary_y=False)
                 fig2.update_yaxes(title_text="% del Total de Viajes", secondary_y=True)
                 
-                st.plotly_chart(fig2, use_container_width=True)
+                st.plotly_chart(fig2, width='stretch')
                 
                 # Si hay datos de aeropuertos específicos
                 if "PULocationID" in df_filtered.columns and AIRPORT_ZONES:
@@ -1834,7 +2286,7 @@ with tab7:
                         )
                         
                         fig3.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig3, use_container_width=True)
+                        st.plotly_chart(fig3, width='stretch')
         
         # TAB 3: ANÁLISIS COMBINADO
         with airport_tabs[2]:
@@ -1867,7 +2319,7 @@ with tab7:
                 )
                 
                 fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                st.plotly_chart(fig1, use_container_width=True)
+                st.plotly_chart(fig1, width='stretch')
                 
                 # Comparación de tarifas
                 if "driver_pay" in df_filtered.columns:
@@ -1886,7 +2338,7 @@ with tab7:
                     fare_comparison["Tarifa Promedio"] = fare_comparison["Tarifa Promedio"].apply(lambda x: f"${x:.2f}")
                     fare_comparison["Tarifa Mediana"] = fare_comparison["Tarifa Mediana"].apply(lambda x: f"${x:.2f}")
                     
-                    st.dataframe(fare_comparison, use_container_width=True)
+                    st.dataframe(fare_comparison, width='stretch')
                     
                     # Boxplot de distribución de tarifas
                     fig2 = px.box(
@@ -1903,7 +2355,7 @@ with tab7:
                         }
                     )
                     
-                    st.plotly_chart(fig2, use_container_width=True)
+                    st.plotly_chart(fig2, width='stretch')
                 
                 # Análisis temporal
                 st.subheader("Distribución Temporal")
@@ -1953,7 +2405,7 @@ with tab7:
                 if day_col == "day_name":
                     fig3.update_layout(xaxis={"categoryorder": "array", "categoryarray": day_order})
                 
-                st.plotly_chart(fig3, use_container_width=True)
+                st.plotly_chart(fig3, width='stretch')
 
 # Nueva pestaña de Modelos de ML
 with tab8:
@@ -2201,7 +2653,7 @@ with tab8:
                             )
                             
                             fig.update_layout(yaxis={'categoryorder': 'total ascending'})
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width='stretch')
                             
                             # Mostrar tabla con importancias
                             with st.expander("Ver tabla de importancias"):
@@ -2218,3 +2670,43 @@ with tab8:
         2. Ejecuta el script train_models.py para entrenar los modelos
         3. Verifica que la carpeta 'models/' existe y contiene los archivos de modelos
         """)
+
+# Footer profesional
+st.markdown("---")
+st.markdown("""
+<div style="background: linear-gradient(90deg, #1f4e79 0%, #2e86ab 100%); 
+            padding: 2rem 1rem; border-radius: 10px; margin-top: 3rem;
+            text-align: center; color: white;">
+    <h3 style="margin: 0; color: white;">🚖 NYC Ride-Hailing Analytics Dashboard</h3>
+    <p style="margin: 0.5rem 0; opacity: 0.9;">Professional Data Analysis & Predictive Modeling Platform</p>
+    <div style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.8;">
+        <span>📊 Powered by Streamlit & Plotly</span> | 
+        <span>🤖 Machine Learning with Scikit-learn & TensorFlow</span> | 
+        <span>📈 Real-time Analytics</span>
+    </div>
+    <div style="margin-top: 1rem; font-size: 0.8rem; opacity: 0.7;">
+        <p>© 2024 NYC Transportation Analytics | Data Source: NYC TLC</p>
+        <p>Built with ❤️ for data-driven transportation insights</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Información adicional en sidebar
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("""
+    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; 
+                border-left: 4px solid #2e86ab; margin: 1rem 0;">
+        <h4 style="margin: 0; color: #2e86ab;">💡 Consejos para Capturas</h4>
+        <ul style="margin: 0.5rem 0; padding-left: 1rem; font-size: 0.9rem;">
+            <li>Usa filtros para datos específicos</li>
+            <li>Prueba diferentes pestañas</li>
+            <li>Interactúa con los gráficos</li>
+            <li>Explora los modelos ML</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Botón de reset
+    if st.button("🔄 Reset Dashboard", help="Reinicia todos los filtros"):
+        st.experimental_rerun()

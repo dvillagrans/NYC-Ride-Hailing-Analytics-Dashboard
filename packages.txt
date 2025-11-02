@@ -1,8 +1,3 @@
 libgdal-dev
 libproj-dev
 libgeos-dev
-libblas-dev
-liblapack-dev
-libatlas-base-dev
-libpng-dev
-libjpeg-dev

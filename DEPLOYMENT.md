@@ -1,52 +1,85 @@
-# 🚀 Deployment Guide - NYC Ride-Hailing Analytics Dashboard
+# Guía de Despliegue - NYC Ride-Hailing Analytics Dashboard
 
-## 📋 Pre-deployment Checklist
+Esta guía te ayudará a desplegar el dashboard de análisis de viajes compartidos de NYC en Streamlit Community Cloud.
 
-✅ **Archivos de configuración creados:**
-- `.streamlit/config.toml` - Configuración de tema y servidor
-- `packages.txt` - Dependencias del sistema
-- `requirements.txt` - Dependencias de Python
+## 🚀 Estado del Despliegue
 
-✅ **Datos de muestra preparados:**
-- `data/2024-02_reduced.parquet` - Dataset principal (100k registros)
-- `data/taxi_zone_lookup.csv` - Información de zonas
-- `data/taxi_zone_centroids.csv` - Coordenadas de zonas
+**✅ LISTO PARA DESPLEGAR**
 
-✅ **Aplicación probada localmente:**
-- Streamlit funciona correctamente
-- Datos se cargan sin errores
-- Visualizaciones se renderizan
+El repositorio está completamente preparado con:
+- ✅ Código actualizado con modelos ML
+- ✅ Dependencies actualizadas (TensorFlow incluido)
+- ✅ Configuración de Streamlit optimizada
+- ✅ Archivos de sistema necesarios
+- ✅ Repositorio Git sincronizado
 
-## 🌐 Deployment en Streamlit Community Cloud
+## Pre-requisitos de Despliegue
 
-### Paso 1: Preparar el repositorio
-1. Asegúrate de que todos los archivos estén en el repositorio de GitHub
-2. Los archivos de datos deben estar incluidos (no están en .gitignore)
-3. Verifica que `requirements.txt` esté actualizado
+### ✅ Lista de Verificación Pre-Despliegue (COMPLETADA)
 
-### Paso 2: Conectar con Streamlit Cloud
-1. Ve a [share.streamlit.io](https://share.streamlit.io)
-2. Conecta tu cuenta de GitHub
-3. Selecciona el repositorio: `NYC-Ride-Hailing-Analytics-Dashboard`
-4. Especifica el archivo principal: `app.py`
-5. Rama: `main` (o la rama principal)
+- [x] **Repositorio Git**: Código en GitHub público ✅
+- [x] **requirements.txt**: 49 dependencias incluidas (con TensorFlow 2.15.0) ✅
+- [x] **packages.txt**: Dependencias del sistema para procesamiento geográfico ✅
+- [x] **Configuración Streamlit**: `.streamlit/config.toml` y `secrets.toml` ✅
+- [x] **Datos**: Datasets incluidos en `/data` y `/data_sampled` ✅
+- [x] **Modelos ML**: Modelo de red neuronal en `/models` ✅
+- [x] **Pruebas locales**: Aplicación funcionando en `http://localhost:8501` ✅
 
-### Paso 3: Configuración avanzada (opcional)
-- **Python version**: 3.9+
-- **Secrets**: No requeridos para este proyecto
-- **Environment variables**: No requeridos
+## 🎯 Pasos para Desplegar en Streamlit Community Cloud
 
-### Paso 4: Deploy
-1. Haz clic en "Deploy!"
-2. Espera a que se complete la instalación de dependencias
-3. La aplicación estará disponible en una URL como: `https://your-app-name.streamlit.app`
+### 1. Acceder a Streamlit Cloud
 
-## 🔧 Solución de problemas comunes
+1. Ve a **[share.streamlit.io](https://share.streamlit.io)**
+2. Inicia sesión con tu cuenta de GitHub
+3. Haz clic en **"New app"**
 
-### Error de memoria
-Si la aplicación falla por memoria:
-- Reduce el tamaño del dataset en `data/2024-02_reduced.parquet`
-- Ejecuta `extract_data.py` con un porcentaje menor (ej: 3%)
+### 2. Configurar la Aplicación
+
+Usa estos valores exactos:
+
+```
+Repository: dvillagrans/NYC-Ride-Hailing-Analytics-Dashboard
+Branch: main
+Main file path: app.py
+App URL: nyc-ride-analytics-dashboard (o el que prefieras)
+```
+
+### 3. Configuración Avanzada
+
+- **Python version**: Se detectará automáticamente (3.11+)
+- **Secrets**: Ya configurado en `.streamlit/secrets.toml`
+- **Environment variables**: No necesarias por ahora
+
+### 4. Iniciar Despliegue
+
+1. Haz clic en **"Deploy!"**
+2. Streamlit Cloud comenzará la instalación automática
+3. **Tiempo estimado**: 8-12 minutos (TensorFlow requiere tiempo adicional)
+4. Monitorea los logs en tiempo real
+
+## 📊 Características del Dashboard Desplegado
+
+Una vez desplegado, tendrás acceso a:
+
+- **📈 Análisis Exploratorio**: Visualizaciones interactivas de datos de viajes
+- **🗺️ Mapas Interactivos**: Distribución geográfica de viajes y tarifas
+- **🏢 Análisis de Aeropuertos**: Clasificación y análisis de aeropuertos NYC
+- **🤖 Modelos ML**: Predicción de tarifas con redes neuronales
+- **📱 Interfaz Responsiva**: Optimizada para desktop y móvil
+
+## 🔧 Solución de Problemas Comunes
+
+### Error de Memoria
+```
+MemoryError: Unable to allocate array
+```
+**Solución**: El código ya está optimizado con `@st.cache_data` y carga lazy de datos.
+
+### Error de TensorFlow
+```
+ImportError: No module named 'tensorflow'
+```
+**Solución**: TensorFlow 2.15.0 ya está en requirements.txt
 
 ### Dependencias faltantes
 Si faltan paquetes del sistema:
@@ -56,7 +89,7 @@ Si faltan paquetes del sistema:
 ### Errores de datos
 Si hay problemas con los datos:
 - Verifica que los archivos CSV tengan las columnas correctas
-- Ejecuta `extract_data.py` nuevamente para regenerar datos
+- Los datasets ya están optimizados y listos
 
 ## 📊 Características del deployment
 

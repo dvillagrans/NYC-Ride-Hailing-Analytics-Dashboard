@@ -2377,7 +2377,7 @@ with tab7:
                     except Exception as e:
                         st.error(f"Error al obtener importancia de features: {str(e)}")
 
-# Footer profesional
+# Footer profesional - Updated to fix deployment cache
 st.markdown("---")
 st.markdown("""
 <div style="background: linear-gradient(90deg, #1f4e79 0%, #2e86ab 100%); 

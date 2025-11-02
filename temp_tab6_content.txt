@@ -1,0 +1,448 @@
+with tab6:
+    st.subheader("✈️ Análisis de Viajes a Aeropuertos")
+    
+    # Verificar si existen las columnas necesarias
+    if "to_airport" not in df_filtered.columns or "from_airport" not in df_filtered.columns:
+        st.warning("""
+        ⚠️ Los datos no contienen información sobre viajes a aeropuertos.
+        
+        Esta funcionalidad requiere las columnas 'to_airport' y 'from_airport' en el dataset.
+        """)
+    else:
+        # Banner informativo
+        st.info("""
+        📍 **Análisis de Conectividad Aeroportuaria**: Este módulo analiza los patrones de viajes hacia y desde 
+        los principales aeropuertos de NYC (JFK, LaGuardia, Newark). Incluye métricas de volumen, tarifas, 
+        distribución temporal y análisis comparativo.
+        """)
+        
+        # Filtrar datos de aeropuertos
+        to_airport_trips = df_filtered[df_filtered["to_airport"] == True]
+        from_airport_trips = df_filtered[df_filtered["from_airport"] == True]
+        all_airport_trips = df_filtered[(df_filtered["to_airport"] == True) | (df_filtered["from_airport"] == True)]
+        
+        # Contadores
+        to_airport_count = len(to_airport_trips)
+        from_airport_count = len(from_airport_trips)
+        all_airport_count = len(all_airport_trips)
+        total_trips = len(df_filtered)
+        
+        # Métricas generales
+        col1, col2, col3, col4 = st.columns(4)
+        
+        col1.metric(
+            "Viajes Hacia Aeropuertos", 
+            f"{to_airport_count:,}",
+            f"{to_airport_count/total_trips*100:.1f}% del total"
+        )
+        
+        col2.metric(
+            "Viajes Desde Aeropuertos", 
+            f"{from_airport_count:,}",
+            f"{from_airport_count/total_trips*100:.1f}% del total"
+        )
+        
+        col3.metric(
+            "Total Viajes Aeroportuarios", 
+            f"{all_airport_count:,}",
+            f"{all_airport_count/total_trips*100:.1f}% del total"
+        )
+        
+        if "driver_pay" in df_filtered.columns and all_airport_count > 0:
+            avg_airport_fare = all_airport_trips["driver_pay"].mean()
+            col4.metric(
+                "Tarifa Promedio Aeropuertos", 
+                f"${avg_airport_fare:.2f}"
+            )
+        
+        # Crear sub-pestañas para análisis detallado
+        airport_tabs = st.tabs(["Viajes Hacia Aeropuertos", "Viajes Desde Aeropuertos", "Ambas Direcciones"])
+        
+        # TAB 1: VIAJES HACIA AEROPUERTOS
+        with airport_tabs[0]:
+            if to_airport_count == 0:
+                st.warning("No hay viajes hacia aeropuertos en los datos filtrados.")
+            else:
+                st.subheader("🛫 Características de Viajes Hacia Aeropuertos")
+                
+                # Métricas principales en tarjetas
+                col1, col2, col3 = st.columns(3)
+                
+                col1.metric(
+                    "Total Viajes hacia Aeropuertos", 
+                    f"{to_airport_count:,}", 
+                    f"{to_airport_count/total_trips*100:.1f}% del total"
+                )
+                
+                # Distancia promedio
+                if "trip_miles" in df_filtered.columns:
+                    avg_miles_airport = to_airport_trips["trip_miles"].mean()
+                    avg_miles_all = df_filtered["trip_miles"].mean()
+                    miles_diff = avg_miles_airport - avg_miles_all
+                    
+                    col2.metric(
+                        "Distancia Promedio", 
+                        f"{avg_miles_airport:.2f} millas", 
+                        f"{miles_diff:+.2f} vs promedio general",
+                        delta_color="normal"
+                    )
+                
+                # Tarifa promedio
+                if "driver_pay" in df_filtered.columns:
+                    avg_fare_airport = to_airport_trips["driver_pay"].mean()
+                    avg_fare_all = df_filtered["driver_pay"].mean()
+                    fare_diff = avg_fare_airport - avg_fare_all
+                    
+                    col3.metric(
+                        "Tarifa Promedio", 
+                        f"${avg_fare_airport:.2f}", 
+                        f"${fare_diff:+.2f} vs promedio general",
+                        delta_color="normal"
+                    )
+                
+                # Análisis por empresa
+                st.subheader("Distribución por Empresa")
+                
+                company_airport = to_airport_trips.groupby("hvfhs_license_num").size().reset_index(name="viajes")
+                company_airport["porcentaje"] = (company_airport["viajes"] / company_airport["viajes"].sum() * 100).round(1)
+                
+                # Gráfico de pastel
+                fig1 = px.pie(
+                    company_airport,
+                    names="hvfhs_license_num",
+                    values="viajes",
+                    title="Participación de Empresas en Viajes hacia Aeropuertos",
+                    hole=0.4,
+                    hover_data=["porcentaje"]
+                )
+                
+                fig1.update_traces(textinfo="percent+label")
+                st.plotly_chart(fig1, width='stretch')
+                
+                # Distribución por hora del día
+                st.subheader("Distribución por Hora del Día")
+                
+                hourly_to_airport = to_airport_trips.groupby("pickup_hour").size().reset_index(name="viajes")
+                hourly_general = df_filtered.groupby("pickup_hour").size().reset_index(name="total_viajes")
+                
+                hourly_combined = hourly_to_airport.merge(hourly_general, on="pickup_hour", how="right")
+                hourly_combined["viajes"] = hourly_combined["viajes"].fillna(0)
+                hourly_combined["porcentaje"] = (hourly_combined["viajes"] / hourly_combined["total_viajes"] * 100).round(1)
+                
+                # Crear figura con dos ejes Y
+                fig2 = make_subplots(specs=[[{"secondary_y": True}]])
+                
+                fig2.add_trace(
+                    go.Bar(
+                        x=hourly_combined["pickup_hour"],
+                        y=hourly_combined["viajes"],
+                        name="Viajes hacia Aeropuertos",
+                        marker_color="#FF9800"
+                    ),
+                    secondary_y=False
+                )
+                
+                fig2.add_trace(
+                    go.Scatter(
+                        x=hourly_combined["pickup_hour"],
+                        y=hourly_combined["porcentaje"],
+                        name="% del Total",
+                        mode="lines+markers",
+                        marker_color="#2196F3",
+                        line=dict(width=3)
+                    ),
+                    secondary_y=True
+                )
+                
+                fig2.update_layout(
+                    title="Viajes hacia Aeropuertos por Hora del Día",
+                    xaxis_title="Hora del Día",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+                )
+                
+                fig2.update_yaxes(title_text="Número de Viajes", secondary_y=False)
+                fig2.update_yaxes(title_text="% del Total de Viajes", secondary_y=True)
+                
+                st.plotly_chart(fig2, width='stretch')
+                
+                # Si hay datos de aeropuertos específicos
+                if "DOLocationID" in df_filtered.columns and AIRPORT_ZONES:
+                    st.subheader("Distribución por Aeropuerto")
+                    
+                    airport_distribution = []
+                    for airport_id in AIRPORT_ZONES:
+                        if airport_id in AIRPORT_NAMES:
+                            airport_trips = to_airport_trips[to_airport_trips["DOLocationID"] == airport_id]
+                            airport_distribution.append({
+                                "Aeropuerto": AIRPORT_NAMES[airport_id],
+                                "Viajes": len(airport_trips),
+                                "Porcentaje": len(airport_trips) / to_airport_count * 100
+                            })
+                    
+                    if airport_distribution:
+                        airport_df = pd.DataFrame(airport_distribution)
+                        
+                        fig3 = px.pie(
+                            airport_df,
+                            names="Aeropuerto",
+                            values="Viajes",
+                            title="Distribución de Viajes por Aeropuerto",
+                            color_discrete_sequence=px.colors.qualitative.Set3
+                        )
+                        
+                        fig3.update_traces(textposition='inside', textinfo='percent+label')
+                        st.plotly_chart(fig3, width='stretch')
+        
+        # TAB 2: VIAJES DESDE AEROPUERTOS
+        with airport_tabs[1]:
+            if from_airport_count == 0:
+                st.warning("No hay viajes desde aeropuertos en los datos filtrados.")
+            else:
+                st.subheader("🛬 Características de Viajes Desde Aeropuertos")
+                
+                # Métricas principales en tarjetas
+                col1, col2, col3 = st.columns(3)
+                
+                col1.metric(
+                    "Total Viajes desde Aeropuertos", 
+                    f"{from_airport_count:,}", 
+                    f"{from_airport_count/total_trips*100:.1f}% del total"
+                )
+                
+                # Distancia promedio
+                if "trip_miles" in df_filtered.columns:
+                    avg_miles_airport = from_airport_trips["trip_miles"].mean()
+                    avg_miles_all = df_filtered["trip_miles"].mean()
+                    miles_diff = avg_miles_airport - avg_miles_all
+                    
+                    col2.metric(
+                        "Distancia Promedio", 
+                        f"{avg_miles_airport:.2f} millas", 
+                        f"{miles_diff:+.2f} vs promedio general",
+                        delta_color="normal"
+                    )
+                
+                # Tarifa promedio
+                if "driver_pay" in df_filtered.columns:
+                    avg_fare_airport = from_airport_trips["driver_pay"].mean()
+                    avg_fare_all = df_filtered["driver_pay"].mean()
+                    fare_diff = avg_fare_airport - avg_fare_all
+                    
+                    col3.metric(
+                        "Tarifa Promedio", 
+                        f"${avg_fare_airport:.2f}", 
+                        f"${fare_diff:+.2f} vs promedio general",
+                        delta_color="normal"
+                    )
+                
+                # Análisis por empresa
+                st.subheader("Distribución por Empresa")
+                
+                company_airport = from_airport_trips.groupby("hvfhs_license_num").size().reset_index(name="viajes")
+                company_airport["porcentaje"] = (company_airport["viajes"] / company_airport["viajes"].sum() * 100).round(1)
+                
+                # Gráfico de pastel
+                fig1 = px.pie(
+                    company_airport,
+                    names="hvfhs_license_num",
+                    values="viajes",
+                    title="Participación de Empresas en Viajes desde Aeropuertos",
+                    hole=0.4,
+                    hover_data=["porcentaje"]
+                )
+                
+                fig1.update_traces(textinfo="percent+label")
+                st.plotly_chart(fig1, width='stretch')
+                
+                # Distribución por hora del día
+                st.subheader("Distribución por Hora del Día")
+                
+                hourly_from_airport = from_airport_trips.groupby("pickup_hour").size().reset_index(name="viajes")
+                hourly_general = df_filtered.groupby("pickup_hour").size().reset_index(name="total_viajes")
+                
+                hourly_combined = hourly_from_airport.merge(hourly_general, on="pickup_hour", how="right")
+                hourly_combined["viajes"] = hourly_combined["viajes"].fillna(0)
+                hourly_combined["porcentaje"] = (hourly_combined["viajes"] / hourly_combined["total_viajes"] * 100).round(1)
+                
+                # Crear figura con dos ejes Y
+                fig2 = make_subplots(specs=[[{"secondary_y": True}]])
+                
+                fig2.add_trace(
+                    go.Bar(
+                        x=hourly_combined["pickup_hour"],
+                        y=hourly_combined["viajes"],
+                        name="Viajes desde Aeropuertos",
+                        marker_color="#4CAF50"
+                    ),
+                    secondary_y=False
+                )
+                
+                fig2.add_trace(
+                    go.Scatter(
+                        x=hourly_combined["pickup_hour"],
+                        y=hourly_combined["porcentaje"],
+                        name="% del Total",
+                        mode="lines+markers",
+                        marker_color="#2196F3",
+                        line=dict(width=3)
+                    ),
+                    secondary_y=True
+                )
+                
+                fig2.update_layout(
+                    title="Viajes desde Aeropuertos por Hora del Día",
+                    xaxis_title="Hora del Día",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+                )
+                
+                fig2.update_yaxes(title_text="Número de Viajes", secondary_y=False)
+                fig2.update_yaxes(title_text="% del Total de Viajes", secondary_y=True)
+                
+                st.plotly_chart(fig2, width='stretch')
+                
+                # Si hay datos de aeropuertos específicos
+                if "PULocationID" in df_filtered.columns and AIRPORT_ZONES:
+                    st.subheader("Distribución por Aeropuerto")
+                    
+                    airport_distribution = []
+                    for airport_id in AIRPORT_ZONES:
+                        if airport_id in AIRPORT_NAMES:
+                            airport_trips = from_airport_trips[from_airport_trips["PULocationID"] == airport_id]
+                            airport_distribution.append({
+                                "Aeropuerto": AIRPORT_NAMES[airport_id],
+                                "Viajes": len(airport_trips),
+                                "Porcentaje": len(airport_trips) / from_airport_count * 100
+                            })
+                    
+                    if airport_distribution:
+                        airport_df = pd.DataFrame(airport_distribution)
+                        
+                        fig3 = px.pie(
+                            airport_df,
+                            names="Aeropuerto",
+                            values="Viajes",
+                            title="Distribución de Viajes por Aeropuerto",
+                            color_discrete_sequence=px.colors.qualitative.Set3
+                        )
+                        
+                        fig3.update_traces(textposition='inside', textinfo='percent+label')
+                        st.plotly_chart(fig3, width='stretch')
+        
+        # TAB 3: ANÁLISIS COMBINADO
+        with airport_tabs[2]:
+            if all_airport_count == 0:
+                st.warning("No hay viajes relacionados con aeropuertos en los datos filtrados.")
+            else:
+                st.subheader("🔄 Análisis Combinado de Viajes a/desde Aeropuertos")
+                
+                # Comparación de volumen
+                st.subheader("Comparación de Volumen")
+                
+                comparison_data = pd.DataFrame([
+                    {"Dirección": "Hacia Aeropuertos", "Viajes": to_airport_count, "Porcentaje": to_airport_count/total_trips*100},
+                    {"Dirección": "Desde Aeropuertos", "Viajes": from_airport_count, "Porcentaje": from_airport_count/total_trips*100},
+                    {"Dirección": "No relacionados con Aeropuertos", "Viajes": total_trips - all_airport_count, "Porcentaje": (total_trips - all_airport_count)/total_trips*100}
+                ])
+                
+                fig1 = px.bar(
+                    comparison_data,
+                    x="Dirección",
+                    y="Viajes",
+                    color="Dirección",
+                    title="Volumen de Viajes por Tipo",
+                    text="Porcentaje",
+                    color_discrete_map={
+                        "Hacia Aeropuertos": "#FF9800", 
+                        "Desde Aeropuertos": "#4CAF50",
+                        "No relacionados con Aeropuertos": "#9E9E9E"
+                    }
+                )
+                
+                fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                st.plotly_chart(fig1, width='stretch')
+                
+                # Comparación de tarifas
+                if "driver_pay" in df_filtered.columns:
+                    st.subheader("Comparación de Tarifas")
+                    
+                    # Crear categorías de dirección
+                    df_filtered["airport_direction"] = "No relacionado con aeropuerto"
+                    df_filtered.loc[df_filtered["to_airport"] == True, "airport_direction"] = "Hacia aeropuerto"
+                    df_filtered.loc[df_filtered["from_airport"] == True, "airport_direction"] = "Desde aeropuerto"
+                    
+                    # Análisis de tarifas por categoría
+                    fare_comparison = df_filtered.groupby("airport_direction")["driver_pay"].agg(["mean", "median", "count"]).reset_index()
+                    fare_comparison.columns = ["Dirección", "Tarifa Promedio", "Tarifa Mediana", "Cantidad"]
+                    
+                    # Formatear para mostrar
+                    fare_comparison["Tarifa Promedio"] = fare_comparison["Tarifa Promedio"].apply(lambda x: f"${x:.2f}")
+                    fare_comparison["Tarifa Mediana"] = fare_comparison["Tarifa Mediana"].apply(lambda x: f"${x:.2f}")
+                    
+                    st.dataframe(fare_comparison, width='stretch')
+                    
+                    # Boxplot de distribución de tarifas
+                    fig2 = px.box(
+                        df_filtered,
+                        x="airport_direction",
+                        y="driver_pay",
+                        color="airport_direction",
+                        title="Distribución de Tarifas por Tipo de Viaje",
+                        labels={"airport_direction": "Dirección", "driver_pay": "Tarifa ($)"},
+                        color_discrete_map={
+                            "Hacia aeropuerto": "#FF9800", 
+                            "Desde aeropuerto": "#4CAF50",
+                            "No relacionado con aeropuerto": "#9E9E9E"
+                        }
+                    )
+                    
+                    st.plotly_chart(fig2, width='stretch')
+                
+                # Análisis temporal
+                st.subheader("Distribución Temporal")
+                
+                if "day_name" in df_filtered.columns:
+                    day_col = "day_name"
+                    day_order = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+                else:
+                    day_col = "pickup_weekday"
+                    day_order = list(range(7))
+                
+                # Crear DataFrame para análisis por día
+                airport_daily = pd.DataFrame()
+                airport_daily["to_airport"] = to_airport_trips.groupby(day_col).size()
+                airport_daily["from_airport"] = from_airport_trips.groupby(day_col).size()
+                airport_daily = airport_daily.fillna(0).reset_index()
+                
+                airport_daily = pd.melt(
+                    airport_daily, 
+                    id_vars=[day_col], 
+                    value_vars=["to_airport", "from_airport"],
+                    var_name="Dirección", 
+                    value_name="Viajes"
+                )
+                
+                # Renombrar para mejor visualización
+                airport_daily["Dirección"] = airport_daily["Dirección"].map({
+                    "to_airport": "Hacia aeropuertos",
+                    "from_airport": "Desde aeropuertos"
+                })
+                
+                # Crear gráfico
+                fig3 = px.line(
+                    airport_daily,
+                    x=day_col,
+                    y="Viajes",
+                    color="Dirección",
+                    title="Distribución de Viajes por Día de la Semana",
+                    markers=True,
+                    labels={day_col: "Día de la Semana", "Viajes": "Número de Viajes"},
+                    color_discrete_map={
+                        "Hacia aeropuertos": "#FF9800", 
+                        "Desde aeropuertos": "#4CAF50"
+                    }
+                )
+                
+                if day_col == "day_name":
+                    fig3.update_layout(xaxis={"categoryorder": "array", "categoryarray": day_order})
+                
+                st.plotly_chart(fig3, width='stretch')

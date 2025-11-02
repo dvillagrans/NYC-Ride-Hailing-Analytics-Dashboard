@@ -1,0 +1,16 @@
+# System packages for Streamlit Cloud deployment
+# These packages will be installed via apt-get
+
+# For geographic data processing
+libgdal-dev
+libproj-dev
+libgeos-dev
+
+# For scientific computing
+libblas-dev
+liblapack-dev
+libatlas-base-dev
+
+# For image processing (if needed)
+libpng-dev
+libjpeg-dev

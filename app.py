@@ -560,13 +560,12 @@ with st.sidebar:
         st.info(f"🔍 Filtrado: {total_records - filtered_records:,} registros ocultos")
 
 # Tabs principales
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Resumen", 
     "🕐 Horas Pico", 
     "🗺️ Mapas", 
     "💼 Uber vs Lyft",
     "💰 Ingresos", 
-    "♿ Accesibilidad",
     "✈️ Aeropuertos",
     "🤖 Modelos ML"
 ])
@@ -1686,337 +1685,64 @@ with tab5:
             st.plotly_chart(fig5, width='stretch')
 
 with tab6:
-    st.subheader("♿ Accesibilidad en el Servicio")
-    
-    # Verificar si existe la columna wheelchair_accessible
-    if "wheelchair_accessible" not in df_filtered.columns:
-        st.warning("No hay datos de accesibilidad disponibles. La columna 'wheelchair_accessible' no existe en el conjunto de datos.")
-        
-        # Añadir una simulación con datos disponibles
-        st.subheader("Análisis Alternativo de Accesibilidad")
-        
-        # Mostramos información para ayudar al usuario a entender
-        st.info("""
-        **Simulación de datos de accesibilidad**
-        
-        Debido a que la columna 'wheelchair_accessible' no está disponible en el conjunto de datos actual,
-        mostraremos algunas métricas alternativas relacionadas con accesibilidad que pueden ser útiles.
-        """)
-        
-        # Verificamos si hay datos de aeropuertos disponibles como alternativa
-        if "from_airport" in df_filtered.columns and "to_airport" in df_filtered.columns:
-            col1, col2 = st.columns(2)
-            
-            # Calcular métricas de aeropuertos que a menudo requieren servicios accesibles
-            airport_trips = df_filtered[(df_filtered["from_airport"] | df_filtered["to_airport"])]
-            total_airport_trips = len(airport_trips)
-            total_trips = len(df_filtered)
-            
-            col1.metric(
-                "Viajes a/desde Aeropuertos", 
-                f"{total_airport_trips:,}", 
-                f"{total_airport_trips / total_trips * 100:.1f}% del total"
-            )
-            
-            if "trip_miles" in df_filtered.columns:
-                # Las distancias largas suelen ser más difíciles para personas con movilidad reducida
-                long_trips = df_filtered[df_filtered["trip_miles"] > 10]
-                col2.metric(
-                    "Viajes de Larga Distancia (>10 millas)",
-                    f"{len(long_trips):,}",
-                    f"{len(long_trips) / total_trips * 100:.1f}% del total"
-                )
-            
-            # Análisis por empresa y aeropuerto
-            st.subheader("Viajes a Aeropuertos por Empresa")
-            company_airport = df_filtered.groupby("hvfhs_license_num")[["from_airport", "to_airport"]].sum().reset_index()
-            company_airport["total_airport_trips"] = company_airport["from_airport"] + company_airport["to_airport"]
-            company_airport["total_trips"] = df_filtered.groupby("hvfhs_license_num").size().values
-            company_airport["porcentaje_airport"] = (company_airport["total_airport_trips"] / company_airport["total_trips"] * 100).round(1)
-            
-            fig1 = px.bar(
-                company_airport,
-                x="hvfhs_license_num",
-                y="porcentaje_airport",
-                title="Porcentaje de Viajes a/desde Aeropuertos por Empresa",
-                labels={"hvfhs_license_num": "Empresa", "porcentaje_airport": "% de Viajes"},
-                text=company_airport["porcentaje_airport"].apply(lambda x: f"{x:.1f}%")
-            )
-            fig1.update_traces(textposition='outside')
-            st.plotly_chart(fig1, width='stretch')
-              # Análisis por hora del día
-            if "driver_pay" in df_filtered.columns:
-                st.subheader("Ingresos por Viajes a Aeropuertos por Hora")
-                # Crear columna airport_type primero
-                df_filtered["airport_type"] = df_filtered["from_airport"] | df_filtered["to_airport"]
-                hourly_data = df_filtered.groupby(["pickup_hour", "airport_type"])["driver_pay"].sum().reset_index()
-                
-                fig2 = px.line(
-                    hourly_data, 
-                    x="pickup_hour", 
-                    y="driver_pay", 
-                    color="airport_type",
-                    color_discrete_map={False: "#FF6B6B", True: "#4CAF50"},
-                    title="Ingresos por Hora del Día (Aeropuerto vs No Aeropuerto)",
-                    labels={"pickup_hour": "Hora del Día", "driver_pay": "Ingresos ($)", "airport_type": "Tipo de Viaje"},
-                    markers=True
-                )
-                
-                # Renombrar leyenda
-                newnames = {False: "No Aeropuerto", True: "Aeropuerto"}
-                fig2.for_each_trace(lambda t: t.update(name = newnames[bool(int(t.name.split('=')[1]))]) if '=' in t.name and len(t.name.split('=')) > 1 else None)
-                
-                st.plotly_chart(fig2, width='stretch')
-            
-            # Análisis geográfico
-            if "pickup_zone" in df_filtered.columns and zones_with_coords is not None:
-                st.subheader("Distribución Geográfica de Viajes a Aeropuertos")
-                
-                zone_data = df_filtered.groupby("pickup_zone").agg(
-                    airport_trips=pd.NamedAgg(column="from_airport", aggfunc=lambda x: sum(x | df_filtered.loc[x.index, "to_airport"])),
-                    total_trips=pd.NamedAgg(column="hvfhs_license_num", aggfunc="count")
-                ).reset_index()
-                
-                zone_data["porcentaje"] = (zone_data["airport_trips"] / zone_data["total_trips"] * 100).round(1)
-                zone_data = zone_data.sort_values("airport_trips", ascending=False)
-                
-                top_zones = zone_data.head(10)
-                
-                fig3 = px.bar(
-                    top_zones,
-                    x="pickup_zone",
-                    y="airport_trips",
-                    title="Zonas con Mayor Número de Viajes a/desde Aeropuertos",
-                    labels={"pickup_zone": "Zona", "airport_trips": "Viajes a/desde Aeropuertos"},
-                    color="porcentaje",
-                    color_continuous_scale="Viridis",
-                    text="porcentaje"
-                )
-                
-                fig3.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                fig3.update_layout(xaxis_tickangle=-45)
-                
-                st.plotly_chart(fig3, width='stretch')
-        else:
-            # Si no hay datos de aeropuertos, mostrar un mensaje alternativo
-            st.warning("No hay datos de viajes a aeropuertos disponibles para realizar un análisis alternativo de accesibilidad.")
-            
-            # Mostrar métricas generales
-            if "trip_miles" in df_filtered.columns and "trip_time" in df_filtered.columns:
-                col1, col2 = st.columns(2)
-                
-                # Percentiles de distancia y tiempo como indicadores indirectos de comodidad
-                p90_distance = df_filtered["trip_miles"].quantile(0.9)
-                p90_time = df_filtered["trip_time"].quantile(0.9) / 60  # convertir a minutos
-                
-                col1.metric("Distancia del 90% de viajes", f"≤ {p90_distance:.2f} millas")
-                col2.metric("Duración del 90% de viajes", f"≤ {p90_time:.1f} min")
-                
-                # Análisis por distancia
-                st.subheader("Distribución de Distancias de Viaje")
-                fig = px.histogram(
-                    df_filtered, 
-                    x="trip_miles",
-                    nbins=50,
-                    color="hvfhs_license_num",
-                    title="Histograma de Distancias de Viaje",
-                    labels={"trip_miles": "Distancia (millas)", "count": "Número de Viajes", "hvfhs_license_num": "Empresa"}
-                )
-                st.plotly_chart(fig, width='stretch')
-    else:
-        # Filtrar solo las columnas relevantes
-        accessible_trips = df_filtered[df_filtered["wheelchair_accessible"] == 1]
-        total_accessible_trips = len(accessible_trips)
-        total_trips = len(df_filtered)
-        
-        # Mostrar métricas principales
-        col1, col2, col3 = st.columns(3)
-        
-        # 1. Total y porcentaje de viajes accesibles
-        col1.metric(
-            "Viajes Accesibles", 
-            f"{total_accessible_trips:,}", 
-            f"{total_accessible_trips / total_trips * 100:.1f}% del total"
-        )
-        
-        # 2. Ingresos por viajes accesibles
-        if "driver_pay" in df_filtered.columns:
-            income_accessible = accessible_trips["driver_pay"].sum()
-            total_income = df_filtered["driver_pay"].sum()
-            col2.metric(
-                "Ingresos por Viajes Accesibles", 
-                f"${income_accessible:,.2f}",
-                f"{income_accessible / total_income * 100:.1f}% del total"
-            )
-        
-        # 3. Promedio de distancia de viajes accesibles
-        if "trip_miles" in df_filtered.columns:
-            avg_distance_accessible = accessible_trips["trip_miles"].mean()
-            avg_distance_all = df_filtered["trip_miles"].mean()
-            difference = avg_distance_accessible - avg_distance_all
-            col3.metric(
-                "Distancia Promedio", 
-                f"{avg_distance_accessible:.2f} millas",
-                f"{difference:.2f} millas vs no accesibles",
-                delta_color="normal"
-            )
-        
-        # Banner informativo
-        st.info("""
-        Los viajes accesibles son aquellos realizados con vehículos equipados para pasajeros con movilidad reducida.
-        Este análisis ayuda a entender la disponibilidad y el uso de servicios de transporte inclusivos.
-        """)
-        
-        # Análisis por empresa
-        st.subheader("Comparativa por Empresa")
-        
-        # Calcular proporción de viajes accesibles por empresa
-        company_accessibility = df_filtered.groupby(["hvfhs_license_num", "wheelchair_accessible"]).size().reset_index(name="trips")
-        company_pivot = company_accessibility.pivot_table(
-            index="hvfhs_license_num", 
-            columns="wheelchair_accessible", 
-            values="trips", 
-            fill_value=0
-        ).reset_index()
-        
-        if 1 in company_pivot.columns:
-            company_pivot["total"] = company_pivot[0] + company_pivot[1]
-            company_pivot["porcentaje_accesible"] = (company_pivot[1] / company_pivot["total"] * 100).round(1)
-            
-            # Gráfico de barras
-            fig1 = go.Figure()
-            
-            fig1.add_trace(go.Bar(
-                x=company_pivot["hvfhs_license_num"],
-                y=company_pivot["porcentaje_accesible"],
-                text=[f"{p:.1f}%" for p in company_pivot["porcentaje_accesible"]],
-                textposition="auto",
-                marker_color="#00CC96"
-            ))
-            
-            fig1.update_layout(
-                title="Porcentaje de Viajes Accesibles por Empresa",
-                xaxis_title="Empresa",
-                yaxis_title="% de Viajes Accesibles",
-                yaxis=dict(range=[0, max(company_pivot["porcentaje_accesible"]) * 1.2])
-            )
-            
-            st.plotly_chart(fig1, width='stretch')
-        
-        # Comparativa gráfica de ingresos
-        if "driver_pay" in df_filtered.columns:
-            hourly_accessible = df_filtered.groupby(["pickup_hour", "wheelchair_accessible"])["driver_pay"].sum().reset_index()
-            
-            fig2 = px.line(
-                hourly_accessible, 
-                x="pickup_hour", 
-                y="driver_pay", 
-                color="wheelchair_accessible",
-                color_discrete_map={0: "#FF6B6B", 1: "#4CAF50"},
-                title="Ingresos por Hora del Día (Accesibles vs No Accesibles)",
-                labels={"pickup_hour": "Hora del Día", "driver_pay": "Ingresos ($)", "wheelchair_accessible": "Accesible"},
-                markers=True
-            )
-            
-            # Renombrar leyenda
-            newnames = {0: "No Accesible", 1: "Accesible"}
-            fig2.for_each_trace(lambda t: t.update(name = newnames[bool(int(t.name.split('=')[1]))]) if '=' in t.name and len(t.name.split('=')) > 1 else None)
-            
-            st.plotly_chart(fig2, width='stretch')
-        
-        # Análisis por día de la semana
-        if "day_name" in df_filtered.columns:
-            day_col = "day_name"
-            day_order = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-        else:
-            day_col = "pickup_weekday"
-            day_order = list(range(7))
-    
-        # Conteo por día de la semana
-        daily_accessible = df_filtered.groupby([day_col, "wheelchair_accessible"]).size().reset_index(name="trips")
-        
-        fig3 = px.bar(
-            daily_accessible,
-            x=day_col,
-            y="trips",
-            color="wheelchair_accessible",
-            color_discrete_map={0: "#FF6B6B", 1: "#4CAF50"},
-            barmode="group",
-            title="Viajes Accesibles vs No Accesibles por Día de la Semana",
-            labels={day_col: "Día de la Semana", "trips": "Número de Viajes", "wheelchair_accessible": "Tipo de Viaje"}
-        )
-        
-        # Renombrar leyenda
-        newnames = {0: "No Accesible", 1: "Accesible"}
-        fig3.for_each_trace(lambda t: t.update(name = newnames[bool(int(t.name.split('=')[1]))]) if '=' in t.name and len(t.name.split('=')) > 1 else None)
-        
-        if day_col == "day_name":
-            fig3.update_layout(xaxis={"categoryorder": "array", "categoryarray": day_order})
-            
-        st.plotly_chart(fig3, width='stretch')
-        
-        # Mapa de distribución si hay datos de zona
-        if "pickup_zone" in df_filtered.columns and zones_with_coords is not None:
-            st.subheader("Distribución Geográfica de Viajes Accesibles")
-            
-            # Agrupar por zona
-            zone_accessible = df_filtered[df_filtered["wheelchair_accessible"] == 1].groupby("pickup_zone").size().reset_index(name="trips")
-            zone_all = df_filtered.groupby("pickup_zone").size().reset_index(name="total_trips")
-            
-            # Combinar datos
-            zone_analysis = zone_accessible.merge(zone_all, on="pickup_zone", how="right")
-            zone_analysis["trips"] = zone_analysis["trips"].fillna(0)
-            zone_analysis["porcentaje"] = (zone_analysis["trips"] / zone_analysis["total_trips"] * 100).round(1)
-            
-            # Ordenar por número de viajes accesibles
-            zone_analysis = zone_analysis.sort_values("trips", ascending=False)
-            
-            # Mostrar top zonas
-            st.subheader("Top 10 Zonas con Mayor Número de Viajes Accesibles")
-            top_zones = zone_analysis.head(10)
-            
-            fig4 = px.bar(
-                top_zones,
-                x="pickup_zone",
-                y="trips",
-                title="Zonas con Mayor Número de Viajes Accesibles",
-                labels={"pickup_zone": "Zona", "trips": "Viajes Accesibles"},
-                color="porcentaje",
-                color_continuous_scale="Viridis",
-                text="porcentaje"
-            )
-            
-            fig4.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig4.update_layout(xaxis_tickangle=-45)
-            
-            st.plotly_chart(fig4, width='stretch')
-
-with tab7:
     st.subheader("✈️ Análisis de Viajes a Aeropuertos")
     
     # Verificar si existen las columnas necesarias
     if "to_airport" not in df_filtered.columns or "from_airport" not in df_filtered.columns:
-        st.warning("No hay datos de viajes a aeropuertos disponibles. Las columnas 'to_airport' y 'from_airport' no existen en el conjunto de datos.")
-    else:
-        # Crear pestañas para análisis de viajes a y desde aeropuertos
-        airport_tabs = st.tabs(["Viajes Hacia Aeropuertos", "Viajes Desde Aeropuertos", "Ambas Direcciones"])
+        st.warning("""
+        ⚠️ Los datos no contienen información sobre viajes a aeropuertos.
         
-        # Filtrar viajes a aeropuertos
+        Esta funcionalidad requiere las columnas 'to_airport' y 'from_airport' en el dataset.
+        """)
+    else:
+        # Banner informativo
+        st.info("""
+        📍 **Análisis de Conectividad Aeroportuaria**: Este módulo analiza los patrones de viajes hacia y desde 
+        los principales aeropuertos de NYC (JFK, LaGuardia, Newark). Incluye métricas de volumen, tarifas, 
+        distribución temporal y análisis comparativo.
+        """)
+        
+        # Filtrar datos de aeropuertos
         to_airport_trips = df_filtered[df_filtered["to_airport"] == True]
         from_airport_trips = df_filtered[df_filtered["from_airport"] == True]
         all_airport_trips = df_filtered[(df_filtered["to_airport"] == True) | (df_filtered["from_airport"] == True)]
         
-        total_trips = len(df_filtered)
+        # Contadores
         to_airport_count = len(to_airport_trips)
         from_airport_count = len(from_airport_trips)
         all_airport_count = len(all_airport_trips)
+        total_trips = len(df_filtered)
         
-        # Banner informativo general
-        st.info(f"""
-        Esta sección analiza los viajes relacionados con aeropuertos. 
-        De los {total_trips:,} viajes totales, {to_airport_count:,} ({to_airport_count/total_trips*100:.1f}%) fueron hacia aeropuertos 
-        y {from_airport_count:,} ({from_airport_count/total_trips*100:.1f}%) fueron desde aeropuertos.
-        """)
+        # Métricas generales
+        col1, col2, col3, col4 = st.columns(4)
+        
+        col1.metric(
+            "Viajes Hacia Aeropuertos", 
+            f"{to_airport_count:,}",
+            f"{to_airport_count/total_trips*100:.1f}% del total"
+        )
+        
+        col2.metric(
+            "Viajes Desde Aeropuertos", 
+            f"{from_airport_count:,}",
+            f"{from_airport_count/total_trips*100:.1f}% del total"
+        )
+        
+        col3.metric(
+            "Total Viajes Aeroportuarios", 
+            f"{all_airport_count:,}",
+            f"{all_airport_count/total_trips*100:.1f}% del total"
+        )
+        
+        if "driver_pay" in df_filtered.columns and all_airport_count > 0:
+            avg_airport_fare = all_airport_trips["driver_pay"].mean()
+            col4.metric(
+                "Tarifa Promedio Aeropuertos", 
+                f"${avg_airport_fare:.2f}"
+            )
+        
+        # Crear sub-pestañas para análisis detallado
+        airport_tabs = st.tabs(["Viajes Hacia Aeropuertos", "Viajes Desde Aeropuertos", "Ambas Direcciones"])
         
         # TAB 1: VIAJES HACIA AEROPUERTOS
         with airport_tabs[0]:
@@ -2029,7 +1755,7 @@ with tab7:
                 col1, col2, col3 = st.columns(3)
                 
                 col1.metric(
-                    "Total Viajes a Aeropuertos", 
+                    "Total Viajes hacia Aeropuertos", 
                     f"{to_airport_count:,}", 
                     f"{to_airport_count/total_trips*100:.1f}% del total"
                 )
@@ -2071,7 +1797,7 @@ with tab7:
                     company_airport,
                     names="hvfhs_license_num",
                     values="viajes",
-                    title="Participación de Empresas en Viajes a Aeropuertos",
+                    title="Participación de Empresas en Viajes hacia Aeropuertos",
                     hole=0.4,
                     hover_data=["porcentaje"]
                 )
@@ -2096,7 +1822,7 @@ with tab7:
                     go.Bar(
                         x=hourly_combined["pickup_hour"],
                         y=hourly_combined["viajes"],
-                        name="Viajes a Aeropuertos",
+                        name="Viajes hacia Aeropuertos",
                         marker_color="#FF9800"
                     ),
                     secondary_y=False
@@ -2108,14 +1834,14 @@ with tab7:
                         y=hourly_combined["porcentaje"],
                         name="% del Total",
                         mode="lines+markers",
-                        marker_color="#E91E63",
+                        marker_color="#2196F3",
                         line=dict(width=3)
                     ),
                     secondary_y=True
                 )
                 
                 fig2.update_layout(
-                    title="Viajes a Aeropuertos por Hora del Día",
+                    title="Viajes hacia Aeropuertos por Hora del Día",
                     xaxis_title="Hora del Día",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
                 )
@@ -2290,122 +2016,384 @@ with tab7:
         
         # TAB 3: ANÁLISIS COMBINADO
         with airport_tabs[2]:
+            st.subheader("🔄 Análisis Combinado de Viajes Aeroportuarios")
+            
             if all_airport_count == 0:
-                st.warning("No hay viajes relacionados con aeropuertos en los datos filtrados.")
+                st.warning("No hay viajes aeroportuarios en los datos filtrados.")
             else:
-                st.subheader("🔄 Análisis Combinado de Viajes a/desde Aeropuertos")
+                # Comparación de volúmenes
+                st.subheader("Comparación de Volúmenes")
                 
-                # Comparación de volumen
-                st.subheader("Comparación de Volumen")
-                
-                comparison_data = pd.DataFrame([
-                    {"Dirección": "Hacia Aeropuertos", "Viajes": to_airport_count, "Porcentaje": to_airport_count/total_trips*100},
-                    {"Dirección": "Desde Aeropuertos", "Viajes": from_airport_count, "Porcentaje": from_airport_count/total_trips*100},
-                    {"Dirección": "No relacionados con Aeropuertos", "Viajes": total_trips - all_airport_count, "Porcentaje": (total_trips - all_airport_count)/total_trips*100}
-                ])
+                volume_data = pd.DataFrame({
+                    "Tipo": ["Hacia Aeropuertos", "Desde Aeropuertos"],
+                    "Viajes": [to_airport_count, from_airport_count],
+                    "Porcentaje": [to_airport_count/total_trips*100, from_airport_count/total_trips*100]
+                })
                 
                 fig1 = px.bar(
-                    comparison_data,
-                    x="Dirección",
+                    volume_data,
+                    x="Tipo",
                     y="Viajes",
-                    color="Dirección",
-                    title="Volumen de Viajes por Tipo",
-                    text="Porcentaje",
-                    color_discrete_map={
-                        "Hacia Aeropuertos": "#FF9800", 
-                        "Desde Aeropuertos": "#4CAF50",
-                        "No relacionados con Aeropuertos": "#9E9E9E"
-                    }
+                    title="Comparación de Volúmenes de Viajes Aeroportuarios",
+                    text="Viajes",
+                    color="Tipo",
+                    color_discrete_sequence=["#FF9800", "#4CAF50"]
                 )
                 
-                fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig1.update_traces(texttemplate='%{text:,}', textposition='outside')
                 st.plotly_chart(fig1, width='stretch')
                 
                 # Comparación de tarifas
                 if "driver_pay" in df_filtered.columns:
                     st.subheader("Comparación de Tarifas")
                     
-                    # Crear categorías de dirección
-                    df_filtered["airport_direction"] = "No relacionado con aeropuerto"
-                    df_filtered.loc[df_filtered["to_airport"] == True, "airport_direction"] = "Hacia aeropuerto"
-                    df_filtered.loc[df_filtered["from_airport"] == True, "airport_direction"] = "Desde aeropuerto"
+                    # Crear DataFrame para comparación
+                    fare_comparison = pd.DataFrame({
+                        "Tipo": ["Hacia Aeropuertos"] * len(to_airport_trips) + ["Desde Aeropuertos"] * len(from_airport_trips),
+                        "Tarifa": list(to_airport_trips["driver_pay"]) + list(from_airport_trips["driver_pay"])
+                    })
                     
-                    # Análisis de tarifas por categoría
-                    fare_comparison = df_filtered.groupby("airport_direction")["driver_pay"].agg(["mean", "median", "count"]).reset_index()
-                    fare_comparison.columns = ["Dirección", "Tarifa Promedio", "Tarifa Mediana", "Cantidad"]
+                    # Mostrar estadísticas
+                    col1, col2 = st.columns(2)
                     
-                    # Formatear para mostrar
-                    fare_comparison["Tarifa Promedio"] = fare_comparison["Tarifa Promedio"].apply(lambda x: f"${x:.2f}")
-                    fare_comparison["Tarifa Mediana"] = fare_comparison["Tarifa Mediana"].apply(lambda x: f"${x:.2f}")
+                    with col1:
+                        st.dataframe(
+                            fare_comparison.groupby("Tipo")["Tarifa"].describe().round(2),
+                            use_container_width=True
+                        )
                     
-                    st.dataframe(fare_comparison, width='stretch')
-                    
-                    # Boxplot de distribución de tarifas
-                    fig2 = px.box(
-                        df_filtered,
-                        x="airport_direction",
-                        y="driver_pay",
-                        color="airport_direction",
-                        title="Distribución de Tarifas por Tipo de Viaje",
-                        labels={"airport_direction": "Dirección", "driver_pay": "Tarifa ($)"},
-                        color_discrete_map={
-                            "Hacia aeropuerto": "#FF9800", 
-                            "Desde aeropuerto": "#4CAF50",
-                            "No relacionado con aeropuerto": "#9E9E9E"
-                        }
-                    )
-                    
-                    st.plotly_chart(fig2, width='stretch')
+                    with col2:
+                        fig2 = px.box(
+                            fare_comparison,
+                            x="Tipo",
+                            y="Tarifa",
+                            title="Distribución de Tarifas por Tipo de Viaje",
+                            color="Tipo",
+                            color_discrete_sequence=["#FF9800", "#4CAF50"]
+                        )
+                        
+                        st.plotly_chart(fig2, width='stretch')
                 
                 # Análisis temporal
-                st.subheader("Distribución Temporal")
-                
                 if "day_name" in df_filtered.columns:
-                    day_col = "day_name"
+                    st.subheader("Análisis Temporal por Día de la Semana")
+                    
+                    # Crear datos temporales
+                    to_airport_daily = to_airport_trips.groupby("day_name").size().reset_index(name="hacia_aeropuertos")
+                    from_airport_daily = from_airport_trips.groupby("day_name").size().reset_index(name="desde_aeropuertos")
+                    
+                    daily_combined = to_airport_daily.merge(from_airport_daily, on="day_name", how="outer").fillna(0)
+                    
+                    # Ordenar días de la semana
                     day_order = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-                else:
-                    day_col = "pickup_weekday"
-                    day_order = list(range(7))
+                    daily_combined["day_name"] = pd.Categorical(daily_combined["day_name"], categories=day_order, ordered=True)
+                    daily_combined = daily_combined.sort_values("day_name")
+                    
+                    fig3 = go.Figure()
+                    
+                    fig3.add_trace(go.Scatter(
+                        x=daily_combined["day_name"],
+                        y=daily_combined["hacia_aeropuertos"],
+                        mode='lines+markers',
+                        name='Hacia Aeropuertos',
+                        line=dict(color='#FF9800', width=3),
+                        marker=dict(size=8)
+                    ))
+                    
+                    fig3.add_trace(go.Scatter(
+                        x=daily_combined["day_name"],
+                        y=daily_combined["desde_aeropuertos"],
+                        mode='lines+markers',
+                        name='Desde Aeropuertos',
+                        line=dict(color='#4CAF50', width=3),
+                        marker=dict(size=8)
+                    ))
+                    
+                    fig3.update_layout(
+                        title="Tendencia de Viajes Aeroportuarios por Día de la Semana",
+                        xaxis_title="Día de la Semana",
+                        yaxis_title="Número de Viajes",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+                    )
+                    
+                    st.plotly_chart(fig3, width='stretch')
+
+with tab7:
+    st.subheader("🤖 Modelos Predictivos y de Clasificación")
+    
+    # Banner informativo
+    st.info("""
+    🧠 **Machine Learning para Análisis de Viajes**
+    
+    Esta sección utiliza modelos de machine learning entrenados para:
+    - **Predicción de Tarifas**: Estima el costo de un viaje basado en sus características
+    - **Clasificación de Aeropuertos**: Determina si un viaje tiene destino a un aeropuerto
+    - **Análisis de Features**: Muestra qué variables son más importantes para las predicciones
+    """)
+    
+    # Verificar si los modelos están disponibles
+    try:
+        import model_utils
+        available_models = model_utils.get_available_models()
+        
+        if available_models:
+            # Mostrar modelos disponibles
+            st.success(f"✅ {len(available_models)} modelo(s) cargado(s) exitosamente")
+            
+            # Información de modelos en expander
+            with st.expander("Ver detalles de modelos disponibles"):
+                for model_name, model_info in available_models.items():
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.write(f"**{model_name.replace('_', ' ').title()}**")
+                    with col2:
+                        model_type = "Red Neuronal" if model_info['type'] == 'neural_network' else "Modelo Tradicional"
+                        st.write(f"Tipo: {model_type}")
+                    with col3:
+                        if 'performance' in model_info:
+                            st.write(f"Performance: {model_info['performance']:.3f}")
+            
+            # Crear tabs para diferentes funcionalidades
+            pred_tabs = st.tabs(["Predicción de Tarifa", "Clasificación de Aeropuertos", "Análisis de Features"])
+            
+            # Tab 1: Predicción de Tarifa
+            with pred_tabs[0]:
+                st.subheader("Predictor de Tarifas")
                 
-                # Crear DataFrame para análisis por día
-                airport_daily = pd.DataFrame()
-                airport_daily["to_airport"] = to_airport_trips.groupby(day_col).size()
-                airport_daily["from_airport"] = from_airport_trips.groupby(day_col).size()
-                airport_daily = airport_daily.fillna(0).reset_index()
+                # Explicación
+                st.info("""
+                Ingresa las características del viaje para obtener una estimación de la tarifa.
+                El modelo considera factores como distancia, duración, hora del día, y empresa.
+                """)
                 
-                airport_daily = pd.melt(
-                    airport_daily, 
-                    id_vars=[day_col], 
-                    value_vars=["to_airport", "from_airport"],
-                    var_name="Dirección", 
-                    value_name="Viajes"
-                )
+                # Formulario para ingresar datos
+                with st.form("fare_prediction_form"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        trip_distance = st.number_input("Distancia del viaje (millas)", min_value=0.1, max_value=50.0, value=5.0, step=0.1)
+                        trip_duration = st.number_input("Duración del viaje (minutos)", min_value=1, max_value=120, value=15, step=1)
+                        pickup_hour = st.slider("Hora de recogida", min_value=0, max_value=23, value=12)
+                        
+                    with col2:
+                        company = st.selectbox("Empresa", options=["Uber", "Lyft", "Via", "Juno"], index=0)
+                        pickup_weekday = st.selectbox("Día de la semana", 
+                                                    options=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"],
+                                                    index=0)
+                        
+                        # Convertir día a número
+                        weekday_map = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, 
+                                     "Viernes": 4, "Sábado": 5, "Domingo": 6}
+                        weekday_num = weekday_map[pickup_weekday]
+                    
+                    # Selector de modelo
+                    fare_models = [name for name, info in available_models.items() if 'fare' in name.lower()]
+                    if fare_models:
+                        selected_model = st.selectbox("Modelo a usar", options=fare_models, 
+                                                    format_func=lambda x: x.replace('_', ' ').title())
+                    
+                    submitted = st.form_submit_button("Predecir Tarifa")
                 
-                # Renombrar para mejor visualización
-                airport_daily["Dirección"] = airport_daily["Dirección"].map({
-                    "to_airport": "Hacia aeropuertos",
-                    "from_airport": "Desde aeropuertos"
+                if submitted and fare_models:
+                    # Crear DataFrame con las características
+                    predict_df = pd.DataFrame({
+                        'trip_miles': [trip_distance],
+                        'trip_time': [trip_duration * 60],  # convertir a segundos
+                        'pickup_hour': [pickup_hour],
+                        'pickup_weekday': [weekday_num],
+                        'hvfhs_license_num': [company],
+                    })
+                    
+                    # Realizar predicción
+                    try:
+                        predicted_fare = model_utils.predict_fare(predict_df, selected_model)
+                        
+                        if predicted_fare is not None:
+                            # Mostrar predicción
+                            st.success(f"💵 El costo estimado del viaje es: **${predicted_fare:.2f}**")
+                            
+                            # Mostrar información del modelo usado
+                            model_info = available_models[selected_model]
+                            model_type = "Red Neuronal" if model_info['type'] == 'neural_network' else "Modelo Tradicional"
+                            st.info(f"Predicción realizada con: {selected_model.replace('_', ' ').title()} ({model_type})")
+                            
+                            # Visualizar con un medidor
+                            if predicted_fare <= 100:
+                                fig = go.Figure(go.Indicator(
+                                    mode = "gauge+number",
+                                    value = predicted_fare,
+                                    domain = {'x': [0, 1], 'y': [0, 1]},
+                                    title = {'text': "Tarifa Estimada ($)"},
+                                    gauge = {
+                                        'axis': {'range': [None, 100]},
+                                        'steps': [
+                                            {'range': [0, 25], 'color': "lightgreen"},
+                                            {'range': [25, 50], 'color': "yellow"},
+                                            {'range': [50, 75], 'color': "orange"},
+                                            {'range': [75, 100], 'color': "red"}
+                                        ],
+                                        'threshold': {
+                                            'line': {'color': "darkred", 'width': 4},
+                                            'thickness': 0.75,
+                                            'value': predicted_fare
+                                        }
+                                    }
+                                ))
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.warning(f"La tarifa estimada (${predicted_fare:.2f}) es muy alta. Verifica los datos ingresados.")
+                        else:
+                            st.error("No se pudo generar una predicción con los datos proporcionados.")
+                    except Exception as e:
+                        st.error(f"Error al predecir: {str(e)}")
+                        st.write("Detalles del error para depuración:")
+                        st.code(str(e))
+                elif submitted:
+                    st.error("No hay modelos de predicción de tarifas disponibles.")
+        
+        # Tab 2: Clasificación de Aeropuertos
+        with pred_tabs[1]:
+            st.subheader("Clasificador de Viajes a Aeropuertos")
+            
+            # Explicación
+            st.info("""
+            Este modelo clasifica si un viaje tiene como destino un aeropuerto en función de sus características.
+            Ingresa los detalles del viaje para obtener una clasificación y la probabilidad asociada.
+            """)
+            
+            # Formulario para ingresar características
+            with st.form("airport_classification_form"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    trip_distance = st.number_input("Distancia del viaje (millas)", min_value=0.1, max_value=50.0, value=10.0, step=0.5, key="airport_dist")
+                    pickup_hour = st.slider("Hora de recogida", min_value=0, max_value=23, value=8, key="airport_hour")
+                    
+                with col2:
+                    trip_duration = st.number_input("Duración del viaje (minutos)", min_value=1, max_value=120, value=25, step=1, key="airport_duration")
+                    company = st.selectbox("Empresa", options=["Uber", "Lyft", "Via", "Juno"], index=0, key="airport_company")
+                
+                submitted = st.form_submit_button("Clasificar Viaje")
+            
+            if submitted:
+                # Crear un DataFrame con las características ingresadas
+                predict_df = pd.DataFrame({
+                    'trip_miles': [trip_distance],
+                    'trip_time': [trip_duration * 60],  # convertir a segundos
+                    'pickup_hour': [pickup_hour],
+                    'hvfhs_license_num': [company],
                 })
                 
-                # Crear gráfico
-                fig3 = px.line(
-                    airport_daily,
-                    x=day_col,
-                    y="Viajes",
-                    color="Dirección",
-                    title="Distribución de Viajes por Día de la Semana",
-                    markers=True,
-                    labels={day_col: "Día de la Semana", "Viajes": "Número de Viajes"},
-                    color_discrete_map={
-                        "Hacia aeropuertos": "#FF9800", 
-                        "Desde aeropuertos": "#4CAF50"
-                    }
-                )
+                # Agregar características adicionales que podrían requerir los modelos
+                predict_df['pickup_weekday'] = 1  # podríamos ajustar esto
                 
-                if day_col == "day_name":
-                    fig3.update_layout(xaxis={"categoryorder": "array", "categoryarray": day_order})
-                
-                st.plotly_chart(fig3, width='stretch')
+                # Intentar predecir
+                try:
+                    predictions, probabilities = model_utils.predict_airport(predict_df)
+                    
+                    if predictions is not None:
+                        # Mostrar predicción
+                        result = "Viaje a Aeropuerto" if predictions[0] == 1 else "Viaje Normal (No a Aeropuerto)"
+                        
+                        # Color según la predicción
+                        result_color = "green" if predictions[0] == 1 else "blue"
+                        
+                        st.markdown(f"<h3 style='color:{result_color};'>Resultado: {result}</h3>", unsafe_allow_html=True)
+                        
+                        # Mostrar probabilidad
+                        if probabilities is not None:
+                            prob_value = probabilities[0] if predictions[0] == 1 else 1 - probabilities[0]
+                            st.metric(
+                                label="Confianza de la predicción",
+                                value=f"{prob_value*100:.1f}%"
+                            )
+                            
+                            # Visualizar probabilidad
+                            fig = go.Figure(go.Indicator(
+                                mode = "gauge+number",
+                                value = prob_value*100,
+                                domain = {'x': [0, 1], 'y': [0, 1]},
+                                title = {'text': "Confianza (%)"},
+                                gauge = {
+                                    'axis': {'range': [None, 100]},
+                                    'steps': [
+                                        {'range': [0, 30], 'color': "lightgray"},
+                                        {'range': [30, 70], 'color': "gray"},
+                                        {'range': [70, 100], 'color': result_color}
+                                    ],
+                                    'threshold': {
+                                        'line': {'color': "red", 'width': 4},
+                                        'thickness': 0.75,
+                                        'value': prob_value*100
+                                    }
+                                }
+                            ))
+                            st.plotly_chart(fig)
+                    else:
+                        st.error("No se pudo generar una clasificación con los datos proporcionados.")
+                except Exception as e:
+                    st.error(f"Error al clasificar: {e}")
+        
+        # Tab 3: Análisis de Features
+        with pred_tabs[2]:
+            st.subheader("Importancia de Variables")
+            
+            # Seleccionar modelo para analizar
+            model_for_analysis = st.selectbox(
+                "Seleccionar modelo para analizar",
+                options=[name for name, info in available_models.items() if 'nn' not in name],
+                format_func=lambda x: available_models[x]['type'] if x in available_models else x
+            )
+            
+            if model_for_analysis:
+                # Obtener importancia de features
+                try:
+                    importances = model_utils.get_feature_importance(model_for_analysis)
+                    
+                    if importances:
+                        # Convertir a DataFrame para visualización
+                        imp_df = pd.DataFrame(
+                            {'Feature': list(importances.keys()), 'Importance': list(importances.values())}
+                        ).sort_values('Importance', ascending=False).head(15)
+                        
+                        # Gráfico de barras horizontales
+                        fig = px.bar(
+                            imp_df,
+                            x='Importance',
+                            y='Feature',
+                            orientation='h',
+                            title=f"Top 15 Variables más Importantes para {available_models[model_for_analysis]['type']}",
+                            labels={'Importance': 'Importancia Relativa', 'Feature': 'Variable'},
+                            color='Importance',
+                            color_continuous_scale='Viridis'
+                        )
+                        
+                        fig.update_layout(yaxis={'categoryorder': 'total ascending'})
+                        st.plotly_chart(fig, width='stretch')
+                        
+                        # Mostrar tabla con importancias
+                        with st.expander("Ver tabla de importancias"):
+                            st.table(imp_df)
+                    else:
+                        st.warning("No se pudieron obtener las importancias de las variables para este modelo.")
+                except Exception as e:
+                    st.error(f"Error al analizar la importancia de variables: {e}")
+    else:
+        st.warning("⚠️ No se encontraron modelos de machine learning.")
+        st.info("""
+        Para usar la funcionalidad de modelos de machine learning:
+        1. Asegúrate de tener instaladas las dependencias necesarias (scikit-learn, tensorflow, joblib)
+        2. Ejecuta el script train_models.py para entrenar los modelos
+        3. Verifica que la carpeta 'models/' existe y contiene los archivos de modelos
+        """)
+except Exception as e:
+    st.error(f"Error al cargar los módulos de machine learning: {e}")
+    st.info("""
+    Para usar la funcionalidad de modelos de machine learning:
+    1. Asegúrate de tener instaladas las dependencias necesarias (scikit-learn, tensorflow, joblib)
+    2. Ejecuta el script train_models.py para entrenar los modelos
+    3. Verifica que la carpeta 'models/' existe y contiene los archivos de modelos
+    """)
 
 # Nueva pestaña de Modelos de ML
 with tab8:
@@ -2422,9 +2410,9 @@ with tab8:
         """)
         
         # Verificar si hay modelos disponibles
-        model_info = model_utils.get_model_info()
+        available_models = model_utils.get_available_models()
         
-        if model_info['status'] == 'No hay modelos disponibles':
+        if not available_models:
             st.warning("""
             ⚠️ No hay modelos entrenados disponibles. 
             
@@ -2451,15 +2439,28 @@ with tab8:
             st.subheader("Modelos Disponibles")
             
             # Crear tarjetas para mostrar cada modelo
-            cols = st.columns(len(model_info['models']) if len(model_info['models']) <= 3 else 3)
+            num_models = len(available_models)
+            cols = st.columns(num_models if num_models <= 3 else 3)
             
-            for i, (name, info) in enumerate(model_info['models'].items()):
+            for i, (model_name, model_info) in enumerate(available_models.items()):
                 col_idx = i % 3
                 with cols[col_idx]:
+                    # Determinar el tipo de modelo para mostrar
+                    model_type = "Red Neuronal" if model_info['type'] == 'neural_network' else "Modelo Tradicional"
+                    
+                    # Obtener métricas para mostrar
+                    metrics = model_info.get('metrics', {})
+                    if 'rmse' in metrics:
+                        performance = f"RMSE: {metrics['rmse']:.2f}"
+                    elif 'accuracy' in metrics:
+                        performance = f"Precisión: {metrics['accuracy']:.2%}"
+                    else:
+                        performance = "Sin métricas"
+                    
                     st.metric(
-                        label=info['type'],
-                        value=info['tech'],
-                        delta=info['performance']
+                        label=model_name.replace('_', ' ').title(),
+                        value=model_type,
+                        delta=performance
                     )
             
             # Crear tabs para diferentes funcionalidades
@@ -2491,49 +2492,63 @@ with tab8:
                     predict_df = pd.DataFrame({
                         'trip_miles': [trip_distance],
                         'trip_time': [trip_duration * 60],  # convertir a segundos
-                        'pickup_hour': [pickup_hour],
-                        'hvfhs_license_num': [company],
-                        'to_airport': [to_airport],
-                        'from_airport': [from_airport]
+                        'pickup_hour': [pickup_hour]
                     })
                     
-                    # Agregar características adicionales que podrían requerir los modelos
-                    predict_df['pickup_weekday'] = 1  # podríamos ajustar esto
-                    
-                    # Intentar predecir
+                    # Intentar predecir con diferentes modelos disponibles
                     try:
-                        prediction = model_utils.predict_fare(predict_df)
+                        # Obtener modelos de predicción de tarifas disponibles
+                        fare_models = [name for name in available_models.keys() if 'driver_pay' in name]
                         
-                        if prediction is not None:
-                            # Mostrar predicción
-                            st.success(f"💵 El costo estimado del viaje es: **${prediction[0]:.2f}**")
+                        if fare_models:
+                            # Usar el primer modelo disponible
+                            selected_model = fare_models[0]
+                            prediction = model_utils.predict_fare(predict_df, model_name=selected_model)
                             
-                            # Visualizar con un medidor
-                            if prediction[0] <= 50:
-                                fig = go.Figure(go.Indicator(
-                                    mode = "gauge+number",
-                                    value = prediction[0],
-                                    domain = {'x': [0, 1], 'y': [0, 1]},
-                                    title = {'text': "Tarifa Estimada ($)"},
-                                    gauge = {
-                                        'axis': {'range': [None, 50]},
-                                        'steps': [
-                                            {'range': [0, 15], 'color': "lightgreen"},
-                                            {'range': [15, 30], 'color': "yellow"},
-                                            {'range': [30, 50], 'color': "orange"}
-                                        ],
-                                        'threshold': {
-                                            'line': {'color': "red", 'width': 4},
-                                            'thickness': 0.75,
-                                            'value': prediction[0]
+                            if prediction is not None and len(prediction) > 0:
+                                predicted_fare = prediction[0]
+                                
+                                # Mostrar predicción
+                                st.success(f"💵 El costo estimado del viaje es: **${predicted_fare:.2f}**")
+                                
+                                # Mostrar información del modelo usado
+                                model_info = available_models[selected_model]
+                                model_type = "Red Neuronal" if model_info['type'] == 'neural_network' else "Modelo Tradicional"
+                                st.info(f"Predicción realizada con: {selected_model.replace('_', ' ').title()} ({model_type})")
+                                
+                                # Visualizar con un medidor
+                                if predicted_fare <= 100:
+                                    fig = go.Figure(go.Indicator(
+                                        mode = "gauge+number",
+                                        value = predicted_fare,
+                                        domain = {'x': [0, 1], 'y': [0, 1]},
+                                        title = {'text': "Tarifa Estimada ($)"},
+                                        gauge = {
+                                            'axis': {'range': [None, 100]},
+                                            'steps': [
+                                                {'range': [0, 25], 'color': "lightgreen"},
+                                                {'range': [25, 50], 'color': "yellow"},
+                                                {'range': [50, 75], 'color': "orange"},
+                                                {'range': [75, 100], 'color': "red"}
+                                            ],
+                                            'threshold': {
+                                                'line': {'color': "darkred", 'width': 4},
+                                                'thickness': 0.75,
+                                                'value': predicted_fare
+                                            }
                                         }
-                                    }
-                                ))
-                                st.plotly_chart(fig)
+                                    ))
+                                    st.plotly_chart(fig, use_container_width=True)
+                                else:
+                                    st.warning(f"La tarifa estimada (${predicted_fare:.2f}) es muy alta. Verifica los datos ingresados.")
+                            else:
+                                st.error("No se pudo generar una predicción con los datos proporcionados.")
                         else:
-                            st.error("No se pudo generar una predicción con los datos proporcionados.")
+                            st.error("No hay modelos de predicción de tarifas disponibles.")
                     except Exception as e:
-                        st.error(f"Error al predecir: {e}")
+                        st.error(f"Error al predecir: {str(e)}")
+                        st.write("Detalles del error para depuración:")
+                        st.code(str(e))
             
             # Tab 2: Clasificación de Aeropuertos
             with pred_tabs[1]:
@@ -2625,8 +2640,8 @@ with tab8:
                 # Seleccionar modelo para analizar
                 model_for_analysis = st.selectbox(
                     "Seleccionar modelo para analizar",
-                    options=[name for name, info in model_info['models'].items() if 'nn' not in name],
-                    format_func=lambda x: model_info['models'][x]['type'] if x in model_info['models'] else x
+                    options=[name for name, info in available_models.items() if 'nn' not in name],
+                    format_func=lambda x: available_models[x]['type'] if x in available_models else x
                 )
                 
                 if model_for_analysis:
@@ -2646,7 +2661,7 @@ with tab8:
                                 x='Importance',
                                 y='Feature',
                                 orientation='h',
-                                title=f"Top 15 Variables más Importantes para {model_info['models'][model_for_analysis]['type']}",
+                                title=f"Top 15 Variables más Importantes para {available_models[model_for_analysis]['type']}",
                                 labels={'Importance': 'Importancia Relativa', 'Feature': 'Variable'},
                                 color='Importance',
                                 color_continuous_scale='Viridis'
